@@ -241,6 +241,73 @@ class IncrementalScanTests(unittest.TestCase):
         self.assertEqual(rows[0]["model"], "gpt-5.5")
         self.assertEqual(rows[0]["total_tokens"], 77)
 
+    def test_codex_scan_marks_claude_model_cache_as_disjoint(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        tz = ZoneInfo("Asia/Shanghai")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp)
+            session_file = codex_home / "sessions" / "2026" / "05" / "04" / "rollout.jsonl"
+            session_file.parent.mkdir(parents=True, exist_ok=True)
+            session_file.write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "type": "session_meta",
+                                "payload": {
+                                    "id": "session-claude",
+                                    "source": "cli",
+                                    "model_provider": "openai",
+                                },
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "type": "turn_context",
+                                "payload": {
+                                    "turn_id": "turn-1",
+                                    "model": "claude-opus-4-7-20260416",
+                                },
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "type": "event_msg",
+                                "timestamp": "2026-05-04T10:00:00+08:00",
+                                "payload": {
+                                    "type": "token_count",
+                                    "info": {
+                                        "last_token_usage": {
+                                            "input_tokens": 100,
+                                            "output_tokens": 10,
+                                            "cached_input_tokens": 1_000,
+                                            "total_tokens": 1_110,
+                                        }
+                                    },
+                                },
+                            }
+                        ),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            scan_codex(conn, codex_home=codex_home, tz=tz)
+
+        row = conn.execute(
+            """
+            SELECT json_extract(metadata_json, '$.cached_input_is_separate') AS cached_separate
+            FROM usage_records
+            WHERE app = 'codex'
+            """
+        ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(row["cached_separate"], 1)
+
     def test_claude_incremental_scan_updates_only_new_or_better_records(self) -> None:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row

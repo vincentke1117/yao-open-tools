@@ -191,8 +191,9 @@ def _scan_session_file(
                             "turn_model": cursor.current_model,
                             "model_provider": cursor.model_provider,
                             "model_context_window": info.get("model_context_window"),
-                            "cached_input_is_separate": _provider_uses_disjoint_cache(
-                                cursor.model_provider
+                            "cached_input_is_separate": _uses_disjoint_cache_metadata(
+                                cursor.model_provider,
+                                cursor.current_model,
                             ),
                         },
                     ),
@@ -223,12 +224,21 @@ def _clean_str(value: object) -> str | None:
     return None
 
 
-def _provider_uses_disjoint_cache(provider: str | None) -> bool:
+def _uses_disjoint_cache_metadata(provider: str | None, model: str | None) -> bool | None:
     # Codex sessions can declare alternative backends via session_meta's
-    # model_provider (e.g. "anthropic" via a custom proxy). Default OpenAI
-    # semantics treat cached_input_tokens as a subset of input_tokens; only
-    # Anthropic-style providers count it disjointly.
-    return (provider or "").strip().lower() in {"anthropic", "claude"}
+    # model_provider, but proxied Claude requests may still appear behind an
+    # OpenAI-compatible provider string. Prefer the Claude model signal before
+    # writing an explicit False value that would bypass pricing's fallback.
+    model_value = (model or "").strip().lower().replace("_", "-")
+    if model_value.startswith("claude"):
+        return True
+
+    provider_value = (provider or "").strip().lower()
+    if provider_value in {"anthropic", "claude"}:
+        return True
+    if provider_value == "openai":
+        return False
+    return None
 
 
 def _cursor_from_state(previous) -> SessionCursor:
