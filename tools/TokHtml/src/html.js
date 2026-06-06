@@ -153,6 +153,7 @@ export function removeEditBridge(html) {
     node.classList.remove('tokhtml-module--drop-target');
     node.classList.remove('tokhtml-module--free-positioned');
     node.classList.remove('tokhtml-module--free-dragging');
+    node.classList.remove('tokhtml-module--resizing');
   });
   document.querySelectorAll('[data-tokhtml-editable]').forEach((node) => {
     node.removeAttribute('contenteditable');

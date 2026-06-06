@@ -59,11 +59,17 @@ test('injectEditBridge uses a structured kami-style floating toolbar', () => {
   assert.match(html, /data-tokhtml-free-handle/);
   assert.match(html, /mountModuleHandle/);
   assert.match(html, /smallestModuleAt/);
-  assert.match(html, /positionModuleHandle/);
+  assert.match(html, /positionModuleControls/);
+  assert.match(html, /styleWidthFromBorderBox/);
+  assert.match(html, /styleHeightFromBorderBox/);
   assert.match(html, /inside-right/);
   assert.match(html, /inside-left/);
   assert.match(html, /startFreeDrag/);
+  assert.match(html, /startResizeDrag/);
+  assert.match(html, /data-tokhtml-resize-handle/);
+  assert.match(html, /tokhtml-resize-handle--right/);
   assert.match(html, /tokhtml-module--free-positioned/);
+  assert.match(html, /tokhtml-module--resizing/);
   assert.doesNotMatch(html, /tokhtml-module-sort-handle/);
   assert.doesNotMatch(html, /data-tokhtml-drag-handle/);
   assert.doesNotMatch(html, /event\.altKey/);
@@ -83,10 +89,11 @@ test('removeEditBridge strips drag sorting runtime markers before saving', () =>
           data-tokhtml-module="true"
           data-tokhtml-free-positioned="true"
           draggable="true"
-          class="hero tokhtml-draggable-module tokhtml-adjustable-active tokhtml-module--free-positioned tokhtml-module--free-dragging"
-          style="position:absolute;inset:32px auto auto 24px;width:300px;z-index:10"
+          class="hero tokhtml-draggable-module tokhtml-adjustable-active tokhtml-module--free-positioned tokhtml-module--free-dragging tokhtml-module--resizing"
+          style="position:absolute;inset:32px auto auto 24px;width:300px;height:180px;z-index:10"
         >
           <button data-tokhtml-bridge="drag-handle" data-tokhtml-free-handle="true">↔</button>
+          <span data-tokhtml-bridge="resize-handle" data-tokhtml-resize-handle="right"></span>
           <h1 data-tokhtml-editable="true" contenteditable="true" class="tokhtml-editable">标题</h1>
         </section>
       </body>
@@ -97,16 +104,19 @@ test('removeEditBridge strips drag sorting runtime markers before saving', () =>
   assert.doesNotMatch(cleaned, /data-tokhtml-free-positioned/);
   assert.doesNotMatch(cleaned, /data-tokhtml-bridge/);
   assert.doesNotMatch(cleaned, /data-tokhtml-free-handle/);
+  assert.doesNotMatch(cleaned, /data-tokhtml-resize-handle/);
   assert.doesNotMatch(cleaned, /contenteditable/);
   assert.doesNotMatch(cleaned, /tokhtml-editable/);
   assert.doesNotMatch(cleaned, /tokhtml-draggable-module/);
   assert.doesNotMatch(cleaned, /tokhtml-adjustable-active/);
   assert.doesNotMatch(cleaned, /tokhtml-module--free-positioned/);
   assert.doesNotMatch(cleaned, /tokhtml-module--free-dragging/);
+  assert.doesNotMatch(cleaned, /tokhtml-module--resizing/);
   assert.match(cleaned, /class="hero"/);
   assert.match(cleaned, /position:absolute/);
   assert.match(cleaned, /left:24px/);
   assert.match(cleaned, /top:32px/);
+  assert.match(cleaned, /height:180px/);
   assert.doesNotMatch(cleaned, /inset:/);
   assert.match(cleaned, /标题/);
 });
