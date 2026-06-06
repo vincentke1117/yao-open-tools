@@ -119,6 +119,13 @@ export function composeDocument(title, body) {
 export function removeEditBridge(html) {
   const { document } = parseHTML(String(html || ''));
   document.querySelectorAll('[data-tokhtml-bridge]').forEach((node) => node.remove());
+  document.querySelectorAll('[data-tokhtml-module]').forEach((node) => {
+    node.removeAttribute('data-tokhtml-module');
+    node.removeAttribute('draggable');
+    node.classList.remove('tokhtml-draggable-module');
+    node.classList.remove('tokhtml-module--dragging');
+    node.classList.remove('tokhtml-module--drop-target');
+  });
   document.querySelectorAll('[data-tokhtml-editable]').forEach((node) => {
     node.removeAttribute('contenteditable');
     node.removeAttribute('data-tokhtml-editable');
