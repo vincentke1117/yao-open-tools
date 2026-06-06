@@ -61,6 +61,7 @@ function bridgeScript(page) {
   let saveTimer = null;
   let dragNode = null;
   let dragMoved = false;
+  let freeDrag = null;
   const selectors = ${JSON.stringify(editableElementSelector)};
   const moduleSelectors = ${JSON.stringify(movableModuleSelector)};
   const ignoredSelector = '[data-tokhtml-bridge],script,style,noscript,textarea,input,select,option,svg,canvas,iframe,video,audio';
@@ -94,7 +95,7 @@ function bridgeScript(page) {
     return Array.from(document.body.querySelectorAll(moduleSelectors))
       .filter((node) => !node.closest('[data-tokhtml-bridge]'))
       .filter((node) => !node.closest(ignoredSelector))
-      .filter((node) => node.parentElement && siblingModules(node.parentElement).length > 1)
+      .filter((node) => node.parentElement)
       .filter((node) => node.textContent.trim() || node.querySelector('img,video,canvas,svg,iframe'));
   }
 
@@ -114,6 +115,10 @@ function bridgeScript(page) {
     document.querySelectorAll('.tokhtml-module--drop-target').forEach((node) => node.classList.remove('tokhtml-module--drop-target'));
   }
 
+  function isFreePositioned(node) {
+    return node.style.position === 'absolute' && node.style.left && node.style.top;
+  }
+
   function parentPrefersHorizontal(parent) {
     const style = window.getComputedStyle(parent);
     if (style.display.includes('grid')) return true;
@@ -130,7 +135,7 @@ function bridgeScript(page) {
   }
 
   function handleModuleDragOver(event) {
-    if (!dragNode) return;
+    if (!dragNode || freeDrag) return;
     const target = event.currentTarget;
     if (!target || target === dragNode || target.parentElement !== dragNode.parentElement) return;
     event.preventDefault();
@@ -148,6 +153,91 @@ function bridgeScript(page) {
     }
   }
 
+  function ensurePositioningParent(node) {
+    const parent = node.parentElement || document.body;
+    const style = window.getComputedStyle(parent);
+    if (style.position === 'static') parent.style.position = 'relative';
+    return parent;
+  }
+
+  function relativePosition(node) {
+    const parent = ensurePositioningParent(node);
+    const rect = node.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    return {
+      parent,
+      left: rect.left - parentRect.left + parent.scrollLeft,
+      top: rect.top - parentRect.top + parent.scrollTop,
+      width: rect.width,
+    };
+  }
+
+  function placeNodeAt(node, left, top) {
+    node.style.left = Math.round(left) + 'px';
+    node.style.top = Math.round(top) + 'px';
+  }
+
+  function startFreeDrag(node, handle, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const position = relativePosition(node);
+    node.style.position = 'absolute';
+    node.style.right = 'auto';
+    node.style.bottom = 'auto';
+    if (!node.style.width) node.style.width = Math.round(position.width) + 'px';
+    if (!node.style.zIndex) node.style.zIndex = '10';
+    placeNodeAt(node, position.left, position.top);
+    node.setAttribute('data-tokhtml-free-positioned', 'true');
+    node.classList.add('tokhtml-module--free-positioned', 'tokhtml-module--free-dragging');
+    handle.draggable = false;
+    freeDrag = {
+      node,
+      handle,
+      startX: event.clientX,
+      startY: event.clientY,
+      startLeft: position.left,
+      startTop: position.top,
+      pointerId: event.pointerId,
+      moved: false,
+    };
+    if (handle.setPointerCapture) handle.setPointerCapture(event.pointerId);
+    setStatus('自由定位中', 'saving');
+  }
+
+  function handleFreeDragMove(event) {
+    if (!freeDrag) return;
+    event.preventDefault();
+    const left = freeDrag.startLeft + event.clientX - freeDrag.startX;
+    const top = freeDrag.startTop + event.clientY - freeDrag.startY;
+    placeNodeAt(freeDrag.node, left, top);
+    freeDrag.moved = true;
+  }
+
+  function finishFreeDrag() {
+    if (!freeDrag) return;
+    const current = freeDrag;
+    current.node.classList.remove('tokhtml-module--free-dragging');
+    current.handle.draggable = true;
+    if (current.handle.releasePointerCapture && current.pointerId !== undefined) {
+      try {
+        current.handle.releasePointerCapture(current.pointerId);
+      } catch {
+        // Pointer capture can already be released by the browser.
+      }
+    }
+    freeDrag = null;
+    if (current.moved) scheduleSave();
+  }
+
+  function resetFreePosition(node) {
+    node.removeAttribute('data-tokhtml-free-positioned');
+    node.classList.remove('tokhtml-module--free-positioned', 'tokhtml-module--free-dragging');
+    ['position', 'left', 'top', 'right', 'bottom', 'width', 'zIndex'].forEach((property) => {
+      node.style[property] = '';
+    });
+    scheduleSave();
+  }
+
   function mountModuleHandles() {
     movableNodes().forEach((node) => {
       node.setAttribute('data-tokhtml-module', 'true');
@@ -160,11 +250,19 @@ function bridgeScript(page) {
         handle.className = 'tokhtml-module-handle';
         handle.setAttribute('data-tokhtml-bridge', 'drag-handle');
         handle.setAttribute('data-tokhtml-drag-handle', 'true');
-        handle.setAttribute('aria-label', '拖动模块');
-        handle.title = '拖动模块';
+        handle.setAttribute('aria-label', '拖动模块，按住 Alt 或 Option 可自由定位');
+        handle.title = '拖动排序；按住 Alt/Option 自由定位；双击还原定位';
         handle.textContent = '↕';
+        handle.addEventListener('pointerdown', (event) => {
+          if (!event.altKey && !isFreePositioned(node)) return;
+          startFreeDrag(node, handle, event);
+        });
         node.prepend(handle);
         handle.addEventListener('dragstart', (event) => {
+          if (freeDrag || isFreePositioned(node)) {
+            event.preventDefault();
+            return;
+          }
           dragNode = node;
           dragMoved = false;
           node.classList.add('tokhtml-module--dragging');
@@ -177,6 +275,11 @@ function bridgeScript(page) {
           dragNode = null;
           if (dragMoved) scheduleSave();
           dragMoved = false;
+        });
+        handle.addEventListener('dblclick', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          resetFreePosition(node);
         });
       }
       node.addEventListener('dragover', handleModuleDragOver);
@@ -193,10 +296,13 @@ function bridgeScript(page) {
     clone.querySelectorAll('[data-tokhtml-bridge]').forEach((node) => node.remove());
     clone.querySelectorAll('[data-tokhtml-module]').forEach((node) => {
       node.removeAttribute('data-tokhtml-module');
+      node.removeAttribute('data-tokhtml-free-positioned');
       node.removeAttribute('draggable');
       node.classList.remove('tokhtml-draggable-module');
       node.classList.remove('tokhtml-module--dragging');
       node.classList.remove('tokhtml-module--drop-target');
+      node.classList.remove('tokhtml-module--free-positioned');
+      node.classList.remove('tokhtml-module--free-dragging');
     });
     clone.querySelectorAll('[data-tokhtml-editable]').forEach((node) => {
       node.removeAttribute('contenteditable');
@@ -245,6 +351,9 @@ function bridgeScript(page) {
   mountToolbar();
   mountModuleHandles();
   enableEditing();
+  document.addEventListener('pointermove', handleFreeDragMove);
+  document.addEventListener('pointerup', finishFreeDrag);
+  document.addEventListener('pointercancel', finishFreeDrag);
   document.addEventListener('input', (event) => {
     if (event.target && event.target.closest('[data-tokhtml-editable]')) scheduleSave();
   });
@@ -276,6 +385,8 @@ export function injectEditBridge(page, html) {
   .tokhtml-module-handle:active{cursor:grabbing;transform:scale(.96)}
   .tokhtml-module--dragging{opacity:.62;outline:2px solid #1B365D!important;outline-offset:4px}
   .tokhtml-module--drop-target{outline:2px dashed #1B365D!important;outline-offset:6px;background-image:linear-gradient(rgba(238,242,247,.58),rgba(238,242,247,.58))}
+  .tokhtml-module--free-positioned{outline:1px solid rgba(27,54,93,.28);outline-offset:4px}
+  .tokhtml-module--free-dragging{outline:2px solid #1B365D!important;box-shadow:0 18px 42px rgba(20,20,19,.18)}
 </style>
 <script data-tokhtml-bridge="script">${bridgeScript(page)}</script>`;
   if (/<\/body>/i.test(html)) {

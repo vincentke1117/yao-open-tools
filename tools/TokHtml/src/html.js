@@ -121,10 +121,13 @@ export function removeEditBridge(html) {
   document.querySelectorAll('[data-tokhtml-bridge]').forEach((node) => node.remove());
   document.querySelectorAll('[data-tokhtml-module]').forEach((node) => {
     node.removeAttribute('data-tokhtml-module');
+    node.removeAttribute('data-tokhtml-free-positioned');
     node.removeAttribute('draggable');
     node.classList.remove('tokhtml-draggable-module');
     node.classList.remove('tokhtml-module--dragging');
     node.classList.remove('tokhtml-module--drop-target');
+    node.classList.remove('tokhtml-module--free-positioned');
+    node.classList.remove('tokhtml-module--free-dragging');
   });
   document.querySelectorAll('[data-tokhtml-editable]').forEach((node) => {
     node.removeAttribute('contenteditable');
