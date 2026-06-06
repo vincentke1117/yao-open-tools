@@ -226,20 +226,21 @@ function bridgeScript(page) {
 
   function positionModuleHandle(handle, node) {
     const rect = node.getBoundingClientRect();
-    const gap = 8;
+    const inset = 6;
     const margin = 8;
     const size = 30;
-    const top = clamp(rect.top + rect.height / 2 - size / 2, margin, window.innerHeight - size - margin);
-    let left = rect.right + gap;
-    let placement = 'right';
-    if (left + size > window.innerWidth - margin) {
-      left = rect.left - gap - size;
-      placement = 'left';
+    const top = clamp(rect.top + inset, margin, window.innerHeight - size - margin);
+    let left = rect.right - size - inset;
+    let placement = 'inside-right';
+    if (rect.width < size + inset * 2 || left < margin) {
+      left = rect.left + inset;
+      placement = 'inside-left';
     }
-    if (left < margin) {
-      left = clamp(rect.right - size - 6, margin, window.innerWidth - size - margin);
-      placement = 'inside';
+    if (rect.width < size + inset * 2 && rect.left + rect.width / 2 - size / 2 >= margin) {
+      left = rect.left + rect.width / 2 - size / 2;
+      placement = 'inside-center';
     }
+    left = clamp(left, margin, window.innerWidth - size - margin);
     handle.style.left = Math.round(left) + 'px';
     handle.style.top = Math.round(top) + 'px';
     handle.dataset.placement = placement;

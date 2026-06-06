@@ -60,6 +60,8 @@ test('injectEditBridge uses a structured kami-style floating toolbar', () => {
   assert.match(html, /mountModuleHandle/);
   assert.match(html, /smallestModuleAt/);
   assert.match(html, /positionModuleHandle/);
+  assert.match(html, /inside-right/);
+  assert.match(html, /inside-left/);
   assert.match(html, /startFreeDrag/);
   assert.match(html, /tokhtml-module--free-positioned/);
   assert.doesNotMatch(html, /tokhtml-module-sort-handle/);
