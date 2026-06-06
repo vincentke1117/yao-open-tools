@@ -31,6 +31,28 @@ export const editableElementSelector = [
 ].join(',');
 
 export const movableModuleSelector = [
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'p',
+  'li',
+  'blockquote',
+  'figcaption',
+  'caption',
+  'dt',
+  'dd',
+  'summary',
+  'label',
+  'legend',
+  'button',
+  'a',
+  'img',
+  'picture',
+  'video',
+  'table',
   'section',
   'article',
   'header',
@@ -59,12 +81,12 @@ function bridgeScript(page) {
   const pageId = ${JSON.stringify(page.id)};
   let revision = ${Number(page.revision)};
   let saveTimer = null;
-  let dragNode = null;
-  let dragMoved = false;
   let freeDrag = null;
+  let activeModule = null;
   const selectors = ${JSON.stringify(editableElementSelector)};
   const moduleSelectors = ${JSON.stringify(movableModuleSelector)};
   const ignoredSelector = '[data-tokhtml-bridge],script,style,noscript,textarea,input,select,option,svg,canvas,iframe,video,audio';
+  const moduleIgnoredSelector = '[data-tokhtml-bridge],script,style,noscript,textarea,input,select,option';
 
   function setStatus(text, tone) {
     const status = document.querySelector('[data-tokhtml-status]');
@@ -84,73 +106,12 @@ function bridgeScript(page) {
     }, []);
   }
 
-  function siblingModules(parent) {
-    if (!parent) return [];
-    return Array.from(parent.children)
-      .filter((node) => node.matches(moduleSelectors))
-      .filter((node) => !node.closest('[data-tokhtml-bridge]'));
-  }
-
-  function movableNodes() {
-    return Array.from(document.body.querySelectorAll(moduleSelectors))
-      .filter((node) => !node.closest('[data-tokhtml-bridge]'))
-      .filter((node) => !node.closest(ignoredSelector))
-      .filter((node) => node.parentElement)
-      .filter((node) => node.textContent.trim() || node.querySelector('img,video,canvas,svg,iframe'));
-  }
-
-  function directModuleTools(node) {
-    return Array.from(node.children).find((child) => child.matches('[data-tokhtml-module-tools]'));
-  }
-
   function enableEditing() {
     editableNodes().forEach((node) => {
       node.setAttribute('contenteditable', 'true');
       node.setAttribute('data-tokhtml-editable', 'true');
       node.classList.add('tokhtml-editable');
     });
-  }
-
-  function clearDropState() {
-    document.querySelectorAll('.tokhtml-module--drop-target').forEach((node) => node.classList.remove('tokhtml-module--drop-target'));
-  }
-
-  function isFreePositioned(node) {
-    return node.style.position === 'absolute' && node.style.left && node.style.top;
-  }
-
-  function parentPrefersHorizontal(parent) {
-    const style = window.getComputedStyle(parent);
-    if (style.display.includes('grid')) return true;
-    if (style.display.includes('flex')) return style.flexDirection.startsWith('row');
-    return false;
-  }
-
-  function shouldInsertBefore(target, event) {
-    const rect = target.getBoundingClientRect();
-    if (parentPrefersHorizontal(target.parentElement)) {
-      return event.clientX < rect.left + rect.width / 2;
-    }
-    return event.clientY < rect.top + rect.height / 2;
-  }
-
-  function handleModuleDragOver(event) {
-    if (!dragNode || freeDrag) return;
-    const target = event.currentTarget;
-    if (!target || target === dragNode || target.parentElement !== dragNode.parentElement) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    clearDropState();
-    target.classList.add('tokhtml-module--drop-target');
-    const before = shouldInsertBefore(target, event);
-    if (before && target.previousElementSibling !== dragNode) {
-      target.parentElement.insertBefore(dragNode, target);
-      dragMoved = true;
-    }
-    if (!before && target.nextElementSibling !== dragNode) {
-      target.parentElement.insertBefore(dragNode, target.nextSibling);
-      dragMoved = true;
-    }
   }
 
   function ensurePositioningParent(node) {
@@ -236,6 +197,84 @@ function bridgeScript(page) {
     scheduleSave();
   }
 
+  function validModule(node) {
+    if (!node || node === document.body || node === document.documentElement) return false;
+    if (!node.matches || !node.matches(moduleSelectors)) return false;
+    if (node.closest('[data-tokhtml-bridge]') || node.closest(moduleIgnoredSelector)) return false;
+    const rect = node.getBoundingClientRect();
+    if (rect.width < 12 || rect.height < 12) return false;
+    return !!(
+      node.textContent.trim() ||
+      node.matches('img,picture,video,canvas,svg,iframe,table') ||
+      node.querySelector('img,picture,video,canvas,svg,iframe,table')
+    );
+  }
+
+  function smallestModuleAt(x, y) {
+    return (document.elementsFromPoint ? document.elementsFromPoint(x, y) : [])
+      .filter(validModule)[0] || null;
+  }
+
+  function clearActiveModule() {
+    if (activeModule) activeModule.classList.remove('tokhtml-adjustable-active');
+    activeModule = null;
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  function positionModuleHandle(handle, node) {
+    const rect = node.getBoundingClientRect();
+    const gap = 8;
+    const margin = 8;
+    const size = 30;
+    const top = clamp(rect.top + rect.height / 2 - size / 2, margin, window.innerHeight - size - margin);
+    let left = rect.right + gap;
+    let placement = 'right';
+    if (left + size > window.innerWidth - margin) {
+      left = rect.left - gap - size;
+      placement = 'left';
+    }
+    if (left < margin) {
+      left = clamp(rect.right - size - 6, margin, window.innerWidth - size - margin);
+      placement = 'inside';
+    }
+    handle.style.left = Math.round(left) + 'px';
+    handle.style.top = Math.round(top) + 'px';
+    handle.dataset.placement = placement;
+  }
+
+  function showModuleHandle(node) {
+    const handle = document.querySelector('[data-tokhtml-free-handle]');
+    if (!handle || !node) return;
+    if (activeModule !== node) {
+      clearActiveModule();
+      activeModule = node;
+      activeModule.classList.add('tokhtml-adjustable-active');
+    }
+    positionModuleHandle(handle, node);
+    handle.hidden = false;
+  }
+
+  function handleModuleHover(event) {
+    if (freeDrag || (event.target && event.target.closest('[data-tokhtml-bridge]'))) return;
+    const node = smallestModuleAt(event.clientX, event.clientY);
+    const handle = document.querySelector('[data-tokhtml-free-handle]');
+    if (!node) {
+      if (handle) handle.hidden = true;
+      clearActiveModule();
+      return;
+    }
+    showModuleHandle(node);
+  }
+
+  function repositionModuleHandle() {
+    const handle = document.querySelector('[data-tokhtml-free-handle]');
+    if (!handle || handle.hidden || !activeModule) return;
+    positionModuleHandle(handle, activeModule);
+  }
+
   function insetParts(value) {
     const parts = String(value || '').trim().split(/\\s+/).filter(Boolean);
     if (!parts.length) return {};
@@ -259,79 +298,35 @@ function bridgeScript(page) {
     node.setAttribute('style', ['position:absolute', 'left:' + left, 'top:' + top, ...declarations].join(';'));
   }
 
-  function mountModuleHandles() {
-    movableNodes().forEach((node) => {
-      node.setAttribute('data-tokhtml-module', 'true');
-      node.classList.add('tokhtml-draggable-module');
-      if (!directModuleTools(node)) {
-        const tools = document.createElement('div');
-        tools.contentEditable = 'false';
-        tools.className = 'tokhtml-module-tools';
-        tools.setAttribute('data-tokhtml-bridge', 'drag-handle');
-        tools.setAttribute('data-tokhtml-module-tools', 'true');
-
-        const freeHandle = document.createElement('button');
-        freeHandle.type = 'button';
-        freeHandle.contentEditable = 'false';
-        freeHandle.className = 'tokhtml-module-tool tokhtml-module-handle';
-        freeHandle.setAttribute('data-tokhtml-free-handle', 'true');
-        freeHandle.setAttribute('aria-label', '自由拖动模块');
-        freeHandle.title = '自由拖动定位；双击还原定位';
-        freeHandle.textContent = '↔';
-
-        const sortHandle = document.createElement('button');
-        sortHandle.type = 'button';
-        sortHandle.draggable = true;
-        sortHandle.contentEditable = 'false';
-        sortHandle.className = 'tokhtml-module-tool tokhtml-module-sort-handle';
-        sortHandle.setAttribute('data-tokhtml-drag-handle', 'true');
-        sortHandle.setAttribute('aria-label', '拖动排序模块');
-        sortHandle.title = '同级模块拖动排序';
-        sortHandle.textContent = '↕';
-
-        tools.append(freeHandle, sortHandle);
-        node.prepend(tools);
-
-        freeHandle.addEventListener('pointerdown', (event) => {
-          if (event.button !== 0) return;
-          startFreeDrag(node, freeHandle, event);
-        });
-        sortHandle.addEventListener('dragstart', (event) => {
-          if (freeDrag || isFreePositioned(node)) {
-            event.preventDefault();
-            return;
-          }
-          dragNode = node;
-          dragMoved = false;
-          node.classList.add('tokhtml-module--dragging');
-          event.dataTransfer.effectAllowed = 'move';
-          event.dataTransfer.setData('text/plain', 'tokhtml-module');
-        });
-        sortHandle.addEventListener('dragend', () => {
-          node.classList.remove('tokhtml-module--dragging');
-          clearDropState();
-          dragNode = null;
-          if (dragMoved) scheduleSave();
-          dragMoved = false;
-        });
-        freeHandle.addEventListener('dblclick', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          resetFreePosition(node);
-        });
-      }
-      node.addEventListener('dragover', handleModuleDragOver);
-      node.addEventListener('drop', (event) => {
-        if (!dragNode) return;
-        event.preventDefault();
-        clearDropState();
-      });
+  function mountModuleHandle() {
+    const handle = document.createElement('button');
+    handle.type = 'button';
+    handle.hidden = true;
+    handle.contentEditable = 'false';
+    handle.className = 'tokhtml-module-handle';
+    handle.setAttribute('data-tokhtml-bridge', 'drag-handle');
+    handle.setAttribute('data-tokhtml-free-handle', 'true');
+    handle.setAttribute('aria-label', '拖动调整当前模块');
+    handle.title = '拖动调整当前模块；双击还原定位';
+    handle.textContent = '↔';
+    handle.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || !activeModule) return;
+      activeModule.setAttribute('data-tokhtml-module', 'true');
+      activeModule.classList.add('tokhtml-draggable-module');
+      startFreeDrag(activeModule, handle, event);
     });
+    handle.addEventListener('dblclick', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (activeModule) resetFreePosition(activeModule);
+    });
+    document.body.append(handle);
   }
 
   function cleanHtmlSnapshot() {
     const clone = document.documentElement.cloneNode(true);
     clone.querySelectorAll('[data-tokhtml-bridge]').forEach((node) => node.remove());
+    clone.querySelectorAll('.tokhtml-adjustable-active').forEach((node) => node.classList.remove('tokhtml-adjustable-active'));
     clone.querySelectorAll('[data-tokhtml-module]').forEach((node) => {
       normalizeFreePositionedStyle(node);
       node.removeAttribute('data-tokhtml-module');
@@ -388,11 +383,14 @@ function bridgeScript(page) {
   }
 
   mountToolbar();
-  mountModuleHandles();
+  mountModuleHandle();
   enableEditing();
+  document.addEventListener('pointermove', handleModuleHover);
   document.addEventListener('pointermove', handleFreeDragMove);
   document.addEventListener('pointerup', finishFreeDrag);
   document.addEventListener('pointercancel', finishFreeDrag);
+  window.addEventListener('scroll', repositionModuleHandle, true);
+  window.addEventListener('resize', repositionModuleHandle);
   document.addEventListener('input', (event) => {
     if (event.target && event.target.closest('[data-tokhtml-editable]')) scheduleSave();
   });
@@ -418,16 +416,10 @@ export function injectEditBridge(page, html) {
   .tokhtml-editable{outline:1px dashed transparent;outline-offset:3px;transition:outline-color .15s ease,background .15s ease}
   .tokhtml-editable:hover{outline-color:#9db4d0;background:rgba(238,242,247,.55)}
   .tokhtml-editable:focus{outline:2px solid #1B365D;background:rgba(238,242,247,.85)}
-  .tokhtml-draggable-module{position:relative}
-  .tokhtml-module-tools{position:absolute;left:6px;top:6px;z-index:2147483646;display:inline-flex;align-items:center;gap:4px;padding:3px;border:1px solid #d1cfc5;border-radius:7px;background:#faf9f5;box-shadow:0 10px 24px rgba(20,20,19,.16);opacity:0;transition:opacity .15s ease,transform .15s ease}
-  .tokhtml-module-tool{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:0;border-radius:5px;background:#fffefa;color:#1B365D;cursor:pointer;font:700 15px/1 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
-  .tokhtml-module-handle{cursor:move}
-  .tokhtml-module-sort-handle{cursor:grab}
-  .tokhtml-draggable-module:hover>.tokhtml-module-tools,.tokhtml-module-tools:focus-within{opacity:1}
-  .tokhtml-module-tool:active{transform:scale(.96)}
-  .tokhtml-module-sort-handle:active{cursor:grabbing}
-  .tokhtml-module--dragging{opacity:.62;outline:2px solid #1B365D!important;outline-offset:4px}
-  .tokhtml-module--drop-target{outline:2px dashed #1B365D!important;outline-offset:6px;background-image:linear-gradient(rgba(238,242,247,.58),rgba(238,242,247,.58))}
+  .tokhtml-module-handle{position:fixed;z-index:2147483646;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:1px solid #d1cfc5;border-radius:7px;background:#faf9f5;color:#1B365D;box-shadow:0 10px 24px rgba(20,20,19,.16);cursor:move;font:700 15px/1 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;transition:transform .12s ease,opacity .12s ease}
+  .tokhtml-module-handle[hidden]{display:none}
+  .tokhtml-module-handle:active{transform:scale(.96)}
+  .tokhtml-adjustable-active{outline:1px dashed rgba(27,54,93,.42)!important;outline-offset:4px}
   .tokhtml-module--free-positioned{outline:1px solid rgba(27,54,93,.28);outline-offset:4px}
   .tokhtml-module--free-dragging{outline:2px solid #1B365D!important;box-shadow:0 18px 42px rgba(20,20,19,.18)}
 </style>

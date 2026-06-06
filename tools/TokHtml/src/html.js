@@ -142,6 +142,7 @@ function normalizeFreePositionedStyle(node) {
 export function removeEditBridge(html) {
   const { document } = parseHTML(String(html || ''));
   document.querySelectorAll('[data-tokhtml-bridge]').forEach((node) => node.remove());
+  document.querySelectorAll('.tokhtml-adjustable-active').forEach((node) => node.classList.remove('tokhtml-adjustable-active'));
   document.querySelectorAll('[data-tokhtml-module]').forEach((node) => {
     normalizeFreePositionedStyle(node);
     node.removeAttribute('data-tokhtml-module');

@@ -56,14 +56,14 @@ test('injectEditBridge uses a structured kami-style floating toolbar', () => {
   assert.match(html, /tokhtml-edit-panel__status/);
   assert.match(html, /tokhtml-edit-panel__actions/);
   assert.match(html, /tokhtml-module-handle/);
-  assert.match(html, /tokhtml-module-sort-handle/);
   assert.match(html, /data-tokhtml-free-handle/);
-  assert.match(html, /data-tokhtml-drag-handle/);
-  assert.match(html, /mountModuleHandles/);
+  assert.match(html, /mountModuleHandle/);
+  assert.match(html, /smallestModuleAt/);
+  assert.match(html, /positionModuleHandle/);
   assert.match(html, /startFreeDrag/);
   assert.match(html, /tokhtml-module--free-positioned/);
-  assert.match(html, /freeHandle\.addEventListener\('pointerdown'/);
-  assert.match(html, /sortHandle\.draggable = true/);
+  assert.doesNotMatch(html, /tokhtml-module-sort-handle/);
+  assert.doesNotMatch(html, /data-tokhtml-drag-handle/);
   assert.doesNotMatch(html, /event\.altKey/);
   assert.doesNotMatch(html, /Alt\/Option/);
   assert.match(html, /href="\/f812c6"/);
@@ -81,13 +81,10 @@ test('removeEditBridge strips drag sorting runtime markers before saving', () =>
           data-tokhtml-module="true"
           data-tokhtml-free-positioned="true"
           draggable="true"
-          class="hero tokhtml-draggable-module tokhtml-module--dragging tokhtml-module--drop-target tokhtml-module--free-positioned tokhtml-module--free-dragging"
+          class="hero tokhtml-draggable-module tokhtml-adjustable-active tokhtml-module--free-positioned tokhtml-module--free-dragging"
           style="position:absolute;inset:32px auto auto 24px;width:300px;z-index:10"
         >
-          <div data-tokhtml-bridge="drag-handle" data-tokhtml-module-tools="true">
-            <button data-tokhtml-free-handle="true">↔</button>
-            <button data-tokhtml-drag-handle="true">↕</button>
-          </div>
+          <button data-tokhtml-bridge="drag-handle" data-tokhtml-free-handle="true">↔</button>
           <h1 data-tokhtml-editable="true" contenteditable="true" class="tokhtml-editable">标题</h1>
         </section>
       </body>
@@ -97,14 +94,11 @@ test('removeEditBridge strips drag sorting runtime markers before saving', () =>
   assert.doesNotMatch(cleaned, /data-tokhtml-module/);
   assert.doesNotMatch(cleaned, /data-tokhtml-free-positioned/);
   assert.doesNotMatch(cleaned, /data-tokhtml-bridge/);
-  assert.doesNotMatch(cleaned, /data-tokhtml-module-tools/);
   assert.doesNotMatch(cleaned, /data-tokhtml-free-handle/);
-  assert.doesNotMatch(cleaned, /data-tokhtml-drag-handle/);
   assert.doesNotMatch(cleaned, /contenteditable/);
   assert.doesNotMatch(cleaned, /tokhtml-editable/);
   assert.doesNotMatch(cleaned, /tokhtml-draggable-module/);
-  assert.doesNotMatch(cleaned, /tokhtml-module--dragging/);
-  assert.doesNotMatch(cleaned, /tokhtml-module--drop-target/);
+  assert.doesNotMatch(cleaned, /tokhtml-adjustable-active/);
   assert.doesNotMatch(cleaned, /tokhtml-module--free-positioned/);
   assert.doesNotMatch(cleaned, /tokhtml-module--free-dragging/);
   assert.match(cleaned, /class="hero"/);
