@@ -12,6 +12,7 @@ import {
   parentDirectoryNameFromRelative,
   parseHtmlMetadata,
   removeEditBridge,
+  slugify,
 } from './html.js';
 
 function nowIso() {
@@ -26,6 +27,20 @@ function displayTime(iso) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(iso));
+}
+
+function dateStamp(iso) {
+  const value = new Date(iso || Date.now());
+  const year = String(value.getFullYear());
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+}
+
+function generatedFileNameForPage(page) {
+  const originalName = String(page.fileName || 'page').replace(/\.html?$/i, '');
+  const cleanName = slugify(originalName).slice(0, 96) || 'page';
+  return `${dateStamp(page.createdAt)}-${cleanName}-${page.slug}.html`;
 }
 
 function rowToPage(row) {
@@ -53,8 +68,8 @@ function rowToPage(row) {
     deletedAt: row.deleted_at || '',
     deletedTime: row.deleted_at ? displayTime(row.deleted_at) : '',
     deletedPath: row.deleted_path || '',
-    url: `/pages/${row.slug}.html`,
-    editUrl: `/pages/${row.slug}.html?edit=1`,
+    url: `/${row.slug}`,
+    editUrl: `/${row.slug}?edit=1`,
   };
 }
 
@@ -313,7 +328,7 @@ export class PageStore {
     const createdAt = nowIso();
     const parsed = parseHtmlMetadata(content, fileName);
     const slug = this.uniqueManagedSlug();
-    const generatedPath = path.join(this.config.generatedDir, `${slug}.html`);
+    const generatedPath = path.join(this.config.generatedDir, generatedFileNameForPage({ slug, fileName, createdAt }));
     const generatedContent = this.prepareGeneratedHtml(content, pageAssetBaseUrl);
     await fs.writeFile(generatedPath, generatedContent);
     const info = {
@@ -734,7 +749,7 @@ export class PageStore {
     const page = this.getPage(id);
     if (!page) return null;
     if (!page.deletedAt) return page;
-    const restoredPath = path.join(this.config.generatedDir, `${page.slug}.html`);
+    const restoredPath = path.join(this.config.generatedDir, generatedFileNameForPage(page));
     await fs.mkdir(path.dirname(restoredPath), { recursive: true });
     const sourcePath = page.generatedPath || page.deletedPath;
     try {

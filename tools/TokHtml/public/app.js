@@ -96,7 +96,7 @@ function displayId(page, index = pages.findIndex((item) => item.id === page.id))
 }
 
 function pageUrl(page) {
-  return page.url || `/pages/${page.slug}.html`;
+  return page.url || `/${page.slug}`;
 }
 
 function editUrl(page) {

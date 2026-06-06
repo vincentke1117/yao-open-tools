@@ -15,7 +15,7 @@ async function createApp() {
     port: 0,
     dataDir,
     uploadsDir: path.join(dataDir, 'uploads'),
-    generatedDir: path.join(dataDir, 'generated'),
+    generatedDir: path.join(dataDir, 'pages'),
     versionsDir: path.join(dataDir, 'versions'),
     publicDir: path.join(process.cwd(), 'public'),
     watchDirs: [path.join(dataDir, 'watch')],
@@ -78,6 +78,11 @@ test('allows public generated page views but protects edit mode', async (t) => {
   const publicView = await app.inject({ method: 'GET', url: page.url });
   assert.equal(publicView.statusCode, 200);
   assert.match(publicView.body, /公开页面/);
+  assert.match(page.url, /^\/[a-z0-9]{6}$/);
+
+  const legacyPublicView = await app.inject({ method: 'GET', url: `/pages/${page.slug}.html` });
+  assert.equal(legacyPublicView.statusCode, 200);
+  assert.match(legacyPublicView.body, /公开页面/);
 
   const editDenied = await app.inject({ method: 'GET', url: `${page.url}?edit=1` });
   assert.equal(editDenied.statusCode, 401);

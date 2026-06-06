@@ -108,6 +108,7 @@ function isPublicRequest(request) {
   const url = new URL(request.url, 'http://tokhtml.local');
   const pathname = url.pathname;
   const isPublicPageView = pathname.startsWith('/pages/') && url.searchParams.get('edit') !== '1';
+  const isPublicShortPageView = /^\/[a-z0-9]{6}$/.test(pathname) && url.searchParams.get('edit') !== '1';
   return (
     pathname === '/' ||
     pathname === '/admin' ||
@@ -117,8 +118,20 @@ function isPublicRequest(request) {
     pathname === '/api/session' ||
     pathname === '/api/login' ||
     pathname.startsWith('/assets/') ||
+    isPublicShortPageView ||
     isPublicPageView
   );
+}
+
+async function sendGeneratedPage(app, request, reply, rawSlug) {
+  const slug = String(rawSlug || '').replace(/\.html?$/i, '');
+  if (!/^[a-z0-9]{6}$/.test(slug)) return sendNotFound(reply, 'Page not found');
+  const page = app.store.getActivePageBySlug(slug);
+  if (!page) return sendNotFound(reply, 'Page not found');
+  app.store.incrementAccessCount(page.id);
+  const html = await app.store.readPageHtml(page);
+  const output = request.query?.edit === '1' ? injectEditBridge(page, html) : html;
+  return reply.header('cache-control', 'no-store').type('text/html; charset=utf-8').send(output);
 }
 
 function currentSession(app, request) {
@@ -324,12 +337,10 @@ export function registerRoutes(app) {
   });
 
   app.get('/pages/:slug', async (request, reply) => {
-    const slug = request.params.slug.replace(/\.html?$/i, '');
-    const page = app.store.getActivePageBySlug(slug);
-    if (!page) return sendNotFound(reply, 'Page not found');
-    app.store.incrementAccessCount(page.id);
-    const html = await app.store.readPageHtml(page);
-    const output = request.query?.edit === '1' ? injectEditBridge(page, html) : html;
-    return reply.header('cache-control', 'no-store').type('text/html; charset=utf-8').send(output);
+    return sendGeneratedPage(app, request, reply, request.params.slug);
+  });
+
+  app.get('/:slug', async (request, reply) => {
+    return sendGeneratedPage(app, request, reply, request.params.slug);
   });
 }

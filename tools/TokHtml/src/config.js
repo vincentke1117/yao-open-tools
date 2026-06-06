@@ -26,7 +26,7 @@ export function loadConfig(env = process.env) {
     port: Number(env.PORT || 8080),
     dataDir,
     uploadsDir: path.join(dataDir, 'uploads'),
-    generatedDir: path.join(dataDir, 'generated'),
+    generatedDir: path.join(dataDir, 'pages'),
     trashDir: path.join(dataDir, 'trash'),
     versionsDir: path.join(dataDir, 'versions'),
     publicDir: path.join(rootDir, 'public'),

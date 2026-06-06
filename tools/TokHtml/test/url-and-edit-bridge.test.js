@@ -39,6 +39,8 @@ test('injectEditBridge uses a structured kami-style floating toolbar', () => {
   assert.match(html, /tokhtml-edit-panel__brand/);
   assert.match(html, /tokhtml-edit-panel__status/);
   assert.match(html, /tokhtml-edit-panel__actions/);
+  assert.match(html, /href="\/f812c6"/);
   assert.match(html, /href="\/admin"/);
   assert.doesNotMatch(html, /href="\/">管理器/);
+  assert.doesNotMatch(html, /href="\/pages\/f812c6\.html"/);
 });

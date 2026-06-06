@@ -1,6 +1,10 @@
 node_modules
 data
 tmp
+dist
+html-inbox
 .git
 .DS_Store
+*.zip
+coverage
 npm-debug.log*

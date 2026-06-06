@@ -16,7 +16,7 @@ async function createStore() {
     port: 0,
     dataDir,
     uploadsDir: path.join(dataDir, 'uploads'),
-    generatedDir: path.join(dataDir, 'generated'),
+    generatedDir: path.join(dataDir, 'pages'),
     versionsDir: path.join(dataDir, 'versions'),
     publicDir: path.join(dataDir, 'public'),
     watchDirs: [watchDir],
@@ -29,7 +29,7 @@ async function createStore() {
 }
 
 test('imports uploaded HTML and extracts directory name from relative path', async (t) => {
-  const { store, db, dataDir } = await createStore();
+  const { store, db, dataDir, config } = await createStore();
   t.after(() => db.close());
   t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
 
@@ -43,6 +43,10 @@ test('imports uploaded HTML and extracts directory name from relative path', asy
   assert.equal(page.directoryName, 'watch-demo-a');
   assert.equal(page.fileName, 'a.html');
   assert.equal(page.revision, 1);
+  assert.match(page.url, /^\/[a-z0-9]{6}$/);
+  assert.equal(page.editUrl, `${page.url}?edit=1`);
+  assert.equal(path.dirname(page.generatedPath), config.generatedDir);
+  assert.match(path.basename(page.generatedPath), new RegExp(`^\\d{8}-a-${page.slug}\\.html$`));
   assert.match(await store.readPageHtml(page), /目录导入 A/);
 });
 
@@ -74,6 +78,7 @@ test('imports upload folders with sibling assets and injects a page asset base',
   assert.equal(pages.length, 1);
   assert.equal(pages[0].directoryName, 'campaign');
   assert.equal(pages[0].fileName, 'index.html');
+  assert.match(path.basename(pages[0].generatedPath), new RegExp(`^\\d{8}-index-${pages[0].slug}\\.html$`));
   assert.match(await store.readPageHtml(pages[0]), /<base data-tokhtml-base href="\/page-assets\/[^/]+\/campaign\/">/);
   await fs.access(path.join(path.dirname(pages[0].sourcePath), 'css', 'style.css'));
   await fs.access(path.join(path.dirname(pages[0].sourcePath), 'images', 'logo.png'));
@@ -223,7 +228,8 @@ test('moves deleted pages into an inaccessible recycle bin and restores them', a
   const restored = await store.restoreDeletedPage(page.id);
   assert.equal(restored.deletedAt, '');
   assert.equal(restored.status, 'published');
-  assert.equal(restored.generatedPath, path.join(config.generatedDir, `${page.slug}.html`));
+  assert.equal(path.dirname(restored.generatedPath), config.generatedDir);
+  assert.match(path.basename(restored.generatedPath), new RegExp(`^\\d{8}-trash-me-${page.slug}\\.html$`));
   assert.equal(store.listPages().length, 1);
   assert.equal(store.listPages({ scope: 'trash' }).length, 0);
   await fs.access(restored.generatedPath);

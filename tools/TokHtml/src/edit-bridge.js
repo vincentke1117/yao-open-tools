@@ -107,7 +107,7 @@ function bridgeScript(page) {
     const toolbar = document.createElement('div');
     toolbar.className = 'tokhtml-edit-panel';
     toolbar.setAttribute('data-tokhtml-bridge', 'toolbar');
-    toolbar.innerHTML = '<div class="tokhtml-edit-panel__brand"><strong>tokhtml</strong><span>页面内编辑</span></div><span class="tokhtml-edit-panel__status" data-tokhtml-status data-tone="saved">已保存</span><div class="tokhtml-edit-panel__actions"><button type="button" data-tokhtml-save>保存</button><a href="/pages/${escapeHtml(page.slug)}.html">退出编辑</a><a href="/admin">管理器</a></div>';
+    toolbar.innerHTML = '<div class="tokhtml-edit-panel__brand"><strong>tokhtml</strong><span>页面内编辑</span></div><span class="tokhtml-edit-panel__status" data-tokhtml-status data-tone="saved">已保存</span><div class="tokhtml-edit-panel__actions"><button type="button" data-tokhtml-save>保存</button><a href="/${escapeHtml(page.slug)}">退出编辑</a><a href="/admin">管理器</a></div>';
     document.body.append(toolbar);
     toolbar.querySelector('[data-tokhtml-save]').addEventListener('click', () => saveNow(true));
   }
