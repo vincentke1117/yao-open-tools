@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>tokhtml 本地 HTML 管理器</title>
+    <title>tokhtml 本地文档管理器</title>
     <style>
       :root {
         --bg: #f5f4ed;
@@ -1660,7 +1660,7 @@
             </div>
             <div>
               <span class="brand-title">tokhtml</span>
-              <span class="brand-subtitle">本地 HTML 管理器 · Docker 运行 · 即开即改</span>
+              <span class="brand-subtitle">本地文档管理器 · Docker 运行 · 即开即读</span>
             </div>
           </div>
           <div class="topbar-actions">
@@ -1690,8 +1690,8 @@
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                   </svg>
                 </div>
-                <h1>上传 HTML 文件，生成本地可管理页面</h1>
-                <p>支持单个 HTML、批量 HTML 或完整目录上传。目录上传会同步图片、CSS、JS 等附件，并为页面生成可访问的本地资源路径。</p>
+                <h1>上传 HTML、PDF 或 Word，生成本地可管理 URL</h1>
+                <p>HTML 支持页面内编辑；PDF 和 Word 会进入阅读器。目录上传仍会同步图片、CSS、JS 等附件，并为 HTML 页面生成可访问的本地资源路径。</p>
                 <div class="upload-actions">
                   <button class="btn btn-primary" id="pickFiles" type="button">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1699,7 +1699,7 @@
                       <path d="m17 8-5-5-5 5"></path>
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                     </svg>
-                    选择 HTML
+                    选择文件
                   </button>
                   <button class="btn" id="pickDirectory" type="button">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1717,7 +1717,7 @@
                 </div>
               </div>
             </div>
-            <input id="fileInput" type="file" accept=".html,.htm,text/html" multiple />
+            <input id="fileInput" type="file" accept=".html,.htm,.pdf,.doc,.docx,text/html,application/pdf" multiple />
             <input id="directoryInput" type="file" webkitdirectory multiple />
           </div>
 
@@ -1743,8 +1743,8 @@
             <div class="table-toolbar">
               <div class="toolbar-left">
                 <div>
-                  <h2 class="section-title">HTML 页面列表</h2>
-                  <p class="section-note">上传完成后，页面在这里进入预览、编辑、复制链接和回收站管理</p>
+                  <h2 class="section-title">文档列表</h2>
+                  <p class="section-note">上传完成后，文档在这里进入预览、阅读、编辑、复制链接和回收站管理</p>
                 </div>
               </div>
               <div class="toolbar-right">
@@ -1764,7 +1764,7 @@
                   <circle cx="11" cy="11" r="8"></circle>
                   <path d="m21 21-4.3-4.3"></path>
                 </svg>
-                <input id="searchInput" type="search" placeholder="搜索 ID、页面标题、文件名或本地 URL" />
+                <input id="searchInput" type="search" placeholder="搜索 ID、标题、文件名或本地 URL" />
               </label>
               <div class="segmented" aria-label="分类筛选">
                 <button class="is-active" type="button" data-filter="all">全部</button>
@@ -1786,6 +1786,7 @@
                   <tr>
                     <th>ID</th>
                     <th>页面标题</th>
+                    <th>类型</th>
                     <th>上传时间</th>
                     <th>大小</th>
                     <th>目录名称</th>
@@ -1951,7 +1952,7 @@
               </svg>
             </span>
             <div>
-              <strong id="previewTitle">页面预览</strong>
+              <strong id="previewTitle">文档预览</strong>
               <span id="previewUrl">/f812c6</span>
             </div>
           </div>
@@ -1964,13 +1965,14 @@
         </div>
         <div class="preview-body">
           <div class="preview-frame-wrap">
-            <iframe class="preview-frame" id="previewFrame" title="HTML 页面预览"></iframe>
+            <iframe class="preview-frame" id="previewFrame" title="文档预览"></iframe>
           </div>
           <aside class="preview-meta">
             <h2 class="section-title">页面信息</h2>
             <div class="meta-list">
               <div class="meta-item"><span>文件名</span><strong id="metaFileName"></strong></div>
               <div class="meta-item"><span>标题</span><strong id="metaTitle"></strong></div>
+              <div class="meta-item"><span>类型</span><strong id="metaFileType"></strong></div>
               <div class="meta-item"><span>上传时间</span><strong id="metaUploadTime"></strong></div>
               <div class="meta-item"><span>本地 URL</span><strong id="metaUrl"></strong></div>
             </div>

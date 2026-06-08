@@ -95,11 +95,34 @@ function displayId(page, index = pages.findIndex((item) => item.id === page.id))
   return `H-${String(Math.max(number, 1)).padStart(3, '0')}`;
 }
 
+function fileType(page) {
+  return page.fileType || 'html';
+}
+
+function isHtmlPage(page) {
+  return fileType(page) === 'html';
+}
+
+function fileTypeLabel(page) {
+  const type = fileType(page);
+  if (type === 'pdf') return 'PDF';
+  if (type === 'word') return 'Word';
+  return 'HTML';
+}
+
+function fileTypeBadgeClass(page) {
+  const type = fileType(page);
+  if (type === 'pdf') return 'badge-warning';
+  if (type === 'word') return 'badge-violet';
+  return 'badge-success';
+}
+
 function pageUrl(page) {
   return page.url || `/${page.slug}`;
 }
 
 function editUrl(page) {
+  if (!isHtmlPage(page)) return '';
   return page.editUrl || `${pageUrl(page)}?edit=1`;
 }
 
@@ -212,13 +235,19 @@ function render() {
       const missing = page.status === 'missing';
       const statusClass = trashed || missing ? 'badge-warning' : page.edited ? 'badge-violet' : 'badge-success';
       const statusText = trashed ? '回收站' : missing ? '源文件缺失' : page.edited ? '已编辑' : '已生成';
+      const editButton = isHtmlPage(page)
+        ? `<button class="btn icon-btn" type="button" title="直接编辑" aria-label="直接编辑" data-action="edit" data-id="${page.id}">${icons.edit}</button>`
+        : '';
+      const syncButton = isHtmlPage(page)
+        ? `<button class="btn icon-btn" type="button" title="上传线上" aria-label="上传线上" data-action="sync" data-id="${page.id}">${icons.cloudUpload}</button>`
+        : '';
       const rowActions = trashed
         ? `<button class="btn" type="button" title="恢复展示" aria-label="恢复展示" data-action="restore" data-id="${page.id}">${icons.restore} 恢复</button>`
-        : `<button class="btn icon-btn" type="button" title="预览" aria-label="预览" data-action="preview" data-id="${page.id}">${icons.eye}</button>
-            <button class="btn icon-btn" type="button" title="直接编辑" aria-label="直接编辑" data-action="edit" data-id="${page.id}">${icons.edit}</button>
+        : `<button class="btn icon-btn" type="button" title="${isHtmlPage(page) ? '预览' : '阅读'}" aria-label="${isHtmlPage(page) ? '预览' : '阅读'}" data-action="preview" data-id="${page.id}">${icons.eye}</button>
+            ${editButton}
             <button class="btn icon-btn" type="button" title="复制 URL" aria-label="复制 URL" data-action="copy" data-id="${page.id}">${icons.copy}</button>
             <button class="btn icon-btn" type="button" title="新窗口打开" aria-label="新窗口打开" data-action="open" data-id="${page.id}">${icons.external}</button>
-            <button class="btn icon-btn" type="button" title="上传线上" aria-label="上传线上" data-action="sync" data-id="${page.id}">${icons.cloudUpload}</button>
+            ${syncButton}
             <button class="btn icon-btn" type="button" title="移入回收站" aria-label="移入回收站" data-action="delete" data-id="${page.id}">${icons.trash}</button>`;
       return `<tr>
         <td><span class="id-chip">${escapeHtml(displayId(page, index))}</span></td>
@@ -228,6 +257,7 @@ function render() {
             <span class="title-meta" title="${escapeHtml(page.fileName)}">${escapeHtml(page.fileName)}</span>
           </div>
         </td>
+        <td><span class="badge ${fileTypeBadgeClass(page)}">${fileTypeLabel(page)}</span></td>
         <td>${escapeHtml(page.uploadTime || page.updatedTime || '-')}</td>
         <td><span class="size-cell">${escapeHtml(formatSize(page.size))}</span></td>
         <td><span class="directory-cell" title="${escapeHtml(page.directoryName || '无目录')}">${escapeHtml(page.directoryName || '-')}</span></td>
@@ -244,12 +274,12 @@ function render() {
 
   if (!pages.length) {
     const emptyText = activeFilter === 'trash' ? '回收站为空' : '暂无匹配页面';
-    els.rows.innerHTML = `<tr><td colspan="8" style="height:120px;text-align:center;color:var(--muted)">${emptyText}</td></tr>`;
+    els.rows.innerHTML = `<tr><td colspan="9" style="height:120px;text-align:center;color:var(--muted)">${emptyText}</td></tr>`;
   }
 
   renderPagination();
   document.querySelector('#metricPages').textContent = pagination.total;
-  document.querySelector('#metricEditable').textContent = pages.filter((page) => page.status !== 'missing').length;
+  document.querySelector('#metricEditable').textContent = pages.filter((page) => isHtmlPage(page) && page.status !== 'missing').length;
   document.querySelector('#metricToday').textContent = pagination.total;
 }
 
@@ -282,10 +312,14 @@ function renderPagination() {
 async function uploadFiles(files) {
   const fileList = Array.from(files || []);
   const hasDirectoryContext = fileList.some((file) => file.webkitRelativePath);
-  const uploadableFiles = hasDirectoryContext ? fileList : fileList.filter((file) => /\.html?$/i.test(file.name));
-  const htmlCount = uploadableFiles.filter((file) => /\.html?$/i.test(file.webkitRelativePath || file.name)).length;
-  if (!htmlCount) {
-    showToast('没有检测到 HTML 文件');
+  const supportedPattern = /\.(html?|pdf|docx?)$/i;
+  const uploadableFiles = hasDirectoryContext ? fileList : fileList.filter((file) => supportedPattern.test(file.name));
+  const supportedFiles = uploadableFiles.filter((file) => supportedPattern.test(file.webkitRelativePath || file.name));
+  const htmlCount = supportedFiles.filter((file) => /\.html?$/i.test(file.webkitRelativePath || file.name)).length;
+  const pdfCount = supportedFiles.filter((file) => /\.pdf$/i.test(file.webkitRelativePath || file.name)).length;
+  const wordCount = supportedFiles.filter((file) => /\.(doc|docx)$/i.test(file.webkitRelativePath || file.name)).length;
+  if (!supportedFiles.length) {
+    showToast('没有检测到 HTML、PDF 或 Word 文件');
     return;
   }
   const form = new FormData();
@@ -296,8 +330,13 @@ async function uploadFiles(files) {
   const result = await api('/api/pages/upload', { method: 'POST', body: form });
   pages = [...(result.pages || []), ...pages];
   await resetToFirstPage();
-  const assetCount = Math.max(0, uploadableFiles.length - htmlCount);
-  showToast(assetCount ? `已导入 ${result.pages.length} 个 HTML，并同步 ${assetCount} 个附件` : `已导入 ${result.pages.length} 个 HTML`);
+  const assetCount = Math.max(0, uploadableFiles.length - supportedFiles.length);
+  const typeParts = [
+    htmlCount ? `${htmlCount} 个 HTML` : '',
+    pdfCount ? `${pdfCount} 个 PDF` : '',
+    wordCount ? `${wordCount} 个 Word` : '',
+  ].filter(Boolean);
+  showToast(assetCount ? `已导入 ${result.pages.length} 个文档，并同步 ${assetCount} 个附件` : `已导入 ${result.pages.length} 个文档：${typeParts.join('、')}`);
 }
 
 async function addSamples() {
@@ -315,8 +354,11 @@ function openPreview(id) {
   document.querySelector('#previewUrl').textContent = pageUrl(page);
   document.querySelector('#metaFileName').textContent = page.fileName;
   document.querySelector('#metaTitle').textContent = page.title;
+  document.querySelector('#metaFileType').textContent = fileTypeLabel(page);
   document.querySelector('#metaUploadTime').textContent = page.uploadTime || page.updatedTime || '-';
   document.querySelector('#metaUrl').textContent = pageUrl(page);
+  document.querySelector('#editFromPreview').hidden = !isHtmlPage(page);
+  els.previewFrame.title = isHtmlPage(page) ? 'HTML 页面预览' : '文档阅读器';
   els.previewFrame.removeAttribute('srcdoc');
   els.previewFrame.src = pageUrl(page);
   openLayer(els.previewBackdrop);
@@ -325,7 +367,12 @@ function openPreview(id) {
 function openEditor(id) {
   const page = findPage(id);
   if (!page) return;
-  window.open(editUrl(page), '_blank', 'noopener,noreferrer');
+  const url = editUrl(page);
+  if (!url) {
+    showToast('PDF 和 Word 文档暂不支持在线编辑');
+    return;
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 function copyUrl(id = currentPageId) {
@@ -361,6 +408,11 @@ async function restorePage(id) {
 }
 
 async function syncPage(id) {
+  const page = findPage(id);
+  if (page && !isHtmlPage(page)) {
+    showToast('只有 HTML 页面支持上传线上');
+    return;
+  }
   if (!settings.remoteSyncEnabled || !settings.remoteSyncUrl) {
     openLayer(els.settingsBackdrop);
     showToast('请先在设置里绑定线上程序');

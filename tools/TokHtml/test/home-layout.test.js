@@ -30,3 +30,15 @@ test('keeps the page list full width and moves watch directories into settings',
   assert.match(html, /data-filter="trash"/);
   assert.match(html, /回收站/);
 });
+
+test('exposes PDF and Word document upload affordances in the manager UI', async () => {
+  const html = await fs.readFile(indexPath, 'utf8');
+
+  assert.match(html, /上传 HTML、PDF 或 Word/);
+  assert.match(html, /选择文件/);
+  assert.match(html, /accept="\.html,\.htm,\.pdf,\.doc,\.docx,text\/html,application\/pdf"/);
+  assert.match(html, /文档列表/);
+  assert.match(html, /<th>类型<\/th>/);
+  assert.match(html, /id="metaFileType"/);
+  assert.match(html, /id="editFromPreview"/);
+});

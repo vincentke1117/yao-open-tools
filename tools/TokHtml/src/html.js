@@ -45,6 +45,39 @@ export function isHtmlFile(filePath) {
   return /\.html?$/i.test(filePath);
 }
 
+export function isPdfFile(filePath) {
+  return /\.pdf$/i.test(filePath);
+}
+
+export function isWordFile(filePath) {
+  return /\.(doc|docx)$/i.test(filePath);
+}
+
+export function managedFileType(filePath) {
+  if (isHtmlFile(filePath)) return 'html';
+  if (isPdfFile(filePath)) return 'pdf';
+  if (isWordFile(filePath)) return 'word';
+  return '';
+}
+
+export function isManagedFile(filePath) {
+  return Boolean(managedFileType(filePath));
+}
+
+export function generatedMimeType(fileType) {
+  if (fileType === 'html') return 'text/html; charset=utf-8';
+  if (fileType === 'pdf' || fileType === 'word') return 'application/pdf';
+  return 'application/octet-stream';
+}
+
+export function basenameWithoutExtension(fileName = 'page') {
+  return path.basename(String(fileName || 'page')).replace(/\.[^.]+$/i, '') || 'page';
+}
+
+export function documentTitleFromFileName(fileName = 'page') {
+  return basenameWithoutExtension(fileName).trim() || '未命名文档';
+}
+
 export function parentDirectoryNameFromRelative(relativePath) {
   const parts = String(relativePath || '').split(/[\\/]/).filter(Boolean);
   if (parts.length < 2) return '';
@@ -60,7 +93,7 @@ export function parseHtmlMetadata(html, fileName = 'page.html') {
   const title =
     document.querySelector('title')?.textContent?.trim() ||
     document.querySelector('h1')?.textContent?.trim() ||
-    fileName.replace(/\.html?$/i, '') ||
+    basenameWithoutExtension(fileName) ||
     '未命名页面';
   const body = document.body?.innerHTML?.trim() || `<h1>${escapeHtml(title)}</h1>`;
   return { title, body };

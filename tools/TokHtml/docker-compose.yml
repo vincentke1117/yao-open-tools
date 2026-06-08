@@ -10,6 +10,7 @@ services:
       TOKHTML_DATA_DIR: /app/data
       TOKHTML_WATCH_DIRS: /watch/html-inbox
       TOKHTML_ALLOW_SOURCE_WRITE: "false"
+      TOKHTML_SOFFICE_BIN: soffice
     volumes:
       - ./data:/app/data
       - ./html-inbox:/watch/html-inbox

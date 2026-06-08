@@ -1,19 +1,28 @@
 import crypto from 'node:crypto';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import {
+  basenameWithoutExtension,
   checksum,
   buildManagedSlug,
   composeDocument,
+  documentTitleFromFileName,
+  generatedMimeType,
   injectAssetBase,
   injectTrackingCode,
   isHtmlFile,
+  isManagedFile,
+  managedFileType,
   parentDirectoryNameFromPath,
   parentDirectoryNameFromRelative,
   parseHtmlMetadata,
   removeEditBridge,
   slugify,
 } from './html.js';
+
+const execFileAsync = promisify(execFile);
 
 function nowIso() {
   return new Date().toISOString();
@@ -38,18 +47,29 @@ function dateStamp(iso) {
 }
 
 function generatedFileNameForPage(page) {
-  const originalName = String(page.fileName || 'page').replace(/\.html?$/i, '');
+  return generatedFileNameForAsset(page, 'html');
+}
+
+function generatedExtensionForPage(page) {
+  return page.fileType === 'html' ? 'html' : 'pdf';
+}
+
+function generatedFileNameForAsset(page, extension = 'html') {
+  const originalName = basenameWithoutExtension(page.fileName || 'page');
   const cleanName = slugify(originalName).slice(0, 96) || 'page';
-  return `${dateStamp(page.createdAt)}-${cleanName}-${page.slug}.html`;
+  return `${dateStamp(page.createdAt)}-${cleanName}-${page.slug}.${extension.replace(/^\./, '')}`;
 }
 
 function rowToPage(row) {
   if (!row) return null;
+  const fileType = row.file_type || 'html';
   return {
     id: row.id,
     slug: row.slug,
     fileName: row.file_name,
     title: row.title,
+    fileType,
+    mimeType: row.mime_type || generatedMimeType(fileType),
     sourceType: row.source_type,
     sourcePath: row.source_path,
     directoryName: row.directory_name || '',
@@ -69,7 +89,7 @@ function rowToPage(row) {
     deletedTime: row.deleted_at ? displayTime(row.deleted_at) : '',
     deletedPath: row.deleted_path || '',
     url: `/${row.slug}`,
-    editUrl: `/${row.slug}?edit=1`,
+    editUrl: fileType === 'html' ? `/${row.slug}?edit=1` : '',
   };
 }
 
@@ -235,6 +255,10 @@ export class PageStore {
     return fs.readFile(page.generatedPath, 'utf8');
   }
 
+  async readPageFile(page) {
+    return fs.readFile(page.generatedPath);
+  }
+
   async importBuffer({ fileName, buffer, relativePath = '' }) {
     const [page] = await this.importUploadFiles([{ fileName, buffer, relativePath }]);
     return page;
@@ -251,8 +275,9 @@ export class PageStore {
           buffer: file.buffer,
         };
       });
-    const htmlFiles = normalized.filter((file) => isHtmlFile(file.relativePath));
-    if (!htmlFiles.length) return [];
+    const managedFiles = normalized.filter((file) => isManagedFile(file.relativePath));
+    const htmlFiles = managedFiles.filter((file) => isHtmlFile(file.relativePath));
+    if (!managedFiles.length) return [];
 
     const uploadRootId = crypto.randomUUID();
     const uploadRoot = path.join(this.config.uploadsDir, uploadRootId);
@@ -268,19 +293,34 @@ export class PageStore {
     }
 
     const created = [];
-    for (const file of htmlFiles) {
+    for (const file of managedFiles) {
       const sourcePath = stored.get(file.relativePath);
-      const content = file.buffer.toString('utf8');
+      if (isHtmlFile(file.relativePath)) {
+        const content = file.buffer.toString('utf8');
+        created.push(
+          await this.createPageFromContent({
+            id: crypto.randomUUID(),
+            fileName: file.fileName,
+            content,
+            sourceType: 'upload',
+            sourcePath,
+            directoryName: parentDirectoryNameFromRelative(file.relativePath),
+            rawMtimeMs: null,
+            assetBaseUrl: hasFolderAssets ? assetBaseUrl(uploadRootId, file.relativePath) : '',
+          }),
+        );
+        continue;
+      }
       created.push(
-        await this.createPageFromContent({
+        await this.createDocumentAsset({
           id: crypto.randomUUID(),
           fileName: file.fileName,
-          content,
+          buffer: file.buffer,
           sourceType: 'upload',
           sourcePath,
           directoryName: parentDirectoryNameFromRelative(file.relativePath),
           rawMtimeMs: null,
-          assetBaseUrl: hasFolderAssets ? assetBaseUrl(uploadRootId, file.relativePath) : '',
+          fileType: managedFileType(file.relativePath),
         }),
       );
     }
@@ -336,6 +376,8 @@ export class PageStore {
       slug,
       fileName,
       title: parsed.title,
+      fileType: 'html',
+      mimeType: generatedMimeType('html'),
       sourceType,
       sourcePath,
       directoryName,
@@ -350,12 +392,72 @@ export class PageStore {
       edited: 0,
       accessCount: 0,
     };
+    this.insertPage(info);
+    return this.getPage(id);
+  }
+
+  async createDocumentAsset({ id, fileName, buffer, sourceType, sourcePath, directoryName, rawMtimeMs, fileType }) {
+    const createdAt = nowIso();
+    const slug = this.uniqueManagedSlug();
+    const generatedPath = path.join(this.config.generatedDir, generatedFileNameForAsset({ slug, fileName, createdAt }, 'pdf'));
+    await fs.mkdir(path.dirname(generatedPath), { recursive: true });
+    if (fileType === 'pdf') {
+      await fs.writeFile(generatedPath, buffer);
+    } else if (fileType === 'word') {
+      await this.convertWordToPdf(sourcePath, generatedPath);
+    } else {
+      throw new Error(`Unsupported document type: ${fileType}`);
+    }
+    const info = {
+      id,
+      slug,
+      fileName,
+      title: documentTitleFromFileName(fileName),
+      fileType,
+      mimeType: generatedMimeType(fileType),
+      sourceType,
+      sourcePath,
+      directoryName,
+      size: Buffer.byteLength(buffer),
+      status: 'published',
+      createdAt,
+      updatedAt: createdAt,
+      revision: 1,
+      generatedPath,
+      rawMtimeMs,
+      checksum: checksum(buffer),
+      edited: 0,
+      accessCount: 0,
+    };
+    this.insertPage(info);
+    return this.getPage(id);
+  }
+
+  async convertWordToPdf(sourcePath, generatedPath) {
+    const converter = this.config.officeConverterBin || process.env.TOKHTML_SOFFICE_BIN || 'soffice';
+    const tempDir = await fs.mkdtemp(path.join(this.config.dataDir, 'convert-'));
+    const expectedOutput = path.join(tempDir, `${basenameWithoutExtension(sourcePath)}.pdf`);
+    try {
+      await execFileAsync(converter, ['--headless', '--convert-to', 'pdf:writer_pdf_Export', '--outdir', tempDir, sourcePath], {
+        timeout: 120000,
+      });
+      await fs.rename(expectedOutput, generatedPath);
+    } catch (error) {
+      const conversionError = new Error(`Word conversion failed: ${error.message}`);
+      conversionError.code = 'WORD_CONVERSION_FAILED';
+      throw conversionError;
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  insertPage(info) {
     this.db
       .prepare(
         `INSERT INTO pages (
           id, slug, file_name, title, source_type, source_path, directory_name, size, status,
-          created_at, updated_at, revision, generated_path, raw_mtime_ms, checksum, edited, access_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          created_at, updated_at, revision, generated_path, file_type, mime_type, raw_mtime_ms, checksum, edited, access_count
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         info.id,
@@ -371,12 +473,13 @@ export class PageStore {
         info.updatedAt,
         info.revision,
         info.generatedPath,
+        info.fileType,
+        info.mimeType,
         info.rawMtimeMs,
         info.checksum,
         info.edited,
         info.accessCount,
       );
-    return this.getPage(id);
   }
 
   prepareGeneratedHtml(content, pageAssetBaseUrl = '') {
@@ -637,6 +740,11 @@ export class PageStore {
       error.code = 'NOT_FOUND';
       throw error;
     }
+    if (page.fileType !== 'html') {
+      const error = new Error('Document assets cannot be edited online');
+      error.code = 'DOCUMENT_NOT_EDITABLE';
+      throw error;
+    }
     if (revision != null && Number(revision) !== Number(page.revision)) {
       const error = new Error('Revision conflict');
       error.code = 'REVISION_CONFLICT';
@@ -733,7 +841,7 @@ export class PageStore {
     const now = nowIso();
     const trashGeneratedDir = path.join(this.trashDir(), 'generated');
     await fs.mkdir(trashGeneratedDir, { recursive: true });
-    const trashPath = path.join(trashGeneratedDir, `${page.id}-${page.slug}.html`);
+    const trashPath = path.join(trashGeneratedDir, `${page.id}-${page.slug}.${generatedExtensionForPage(page)}`);
     try {
       await fs.rename(page.generatedPath, trashPath);
     } catch (error) {
@@ -749,7 +857,7 @@ export class PageStore {
     const page = this.getPage(id);
     if (!page) return null;
     if (!page.deletedAt) return page;
-    const restoredPath = path.join(this.config.generatedDir, generatedFileNameForPage(page));
+    const restoredPath = path.join(this.config.generatedDir, generatedFileNameForAsset(page, generatedExtensionForPage(page)));
     await fs.mkdir(path.dirname(restoredPath), { recursive: true });
     const sourcePath = page.generatedPath || page.deletedPath;
     try {

@@ -2,6 +2,10 @@ FROM node:25-bookworm-slim
 
 WORKDIR /app
 
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libreoffice-writer fonts-noto-cjk fontconfig \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
 RUN npm install --omit=dev
 
@@ -12,6 +16,7 @@ ENV HOST=0.0.0.0
 ENV PORT=8080
 ENV TOKHTML_DATA_DIR=/app/data
 ENV TOKHTML_WATCH_DIRS=/watch/html-inbox
+ENV TOKHTML_SOFFICE_BIN=soffice
 
 EXPOSE 8080
 

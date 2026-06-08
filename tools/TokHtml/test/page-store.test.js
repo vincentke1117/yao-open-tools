@@ -6,7 +6,7 @@ import test from 'node:test';
 import { createDb } from '../src/db.js';
 import { PageStore } from '../src/page-store.js';
 
-async function createStore() {
+async function createStore(overrides = {}) {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tokhtml-test-'));
   const watchDir = path.join(dataDir, 'watch');
   const config = {
@@ -21,6 +21,7 @@ async function createStore() {
     publicDir: path.join(dataDir, 'public'),
     watchDirs: [watchDir],
     allowSourceWrite: false,
+    ...overrides,
   };
   const db = createDb(config);
   const store = new PageStore(config, db);
@@ -48,6 +49,69 @@ test('imports uploaded HTML and extracts directory name from relative path', asy
   assert.equal(path.dirname(page.generatedPath), config.generatedDir);
   assert.match(path.basename(page.generatedPath), new RegExp(`^\\d{8}-a-${page.slug}\\.html$`));
   assert.match(await store.readPageHtml(page), /目录导入 A/);
+});
+
+test('imports uploaded PDF as a public readable document asset', async (t) => {
+  const { store, db, dataDir, config } = await createStore();
+  t.after(() => db.close());
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+
+  const pdfBytes = Buffer.from('%PDF-1.4\n% tokhtml pdf probe\n');
+  const page = await store.importBuffer({
+    fileName: 'report.pdf',
+    relativePath: 'docs/report.pdf',
+    buffer: pdfBytes,
+  });
+
+  assert.equal(page.fileType, 'pdf');
+  assert.equal(page.mimeType, 'application/pdf');
+  assert.equal(page.title, 'report');
+  assert.equal(page.directoryName, 'docs');
+  assert.equal(page.fileName, 'report.pdf');
+  assert.equal(page.editUrl, '');
+  assert.match(page.url, /^\/[a-z0-9]{6}$/);
+  assert.equal(path.dirname(page.generatedPath), config.generatedDir);
+  assert.match(path.basename(page.generatedPath), new RegExp(`^\\d{8}-report-${page.slug}\\.pdf$`));
+  assert.deepEqual(await store.readPageFile(page), pdfBytes);
+});
+
+test('imports uploaded Word documents by converting them to readable PDF assets', async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tokhtml-office-'));
+  const fakeOffice = path.join(dataDir, 'fake-soffice.mjs');
+  await fs.writeFile(
+    fakeOffice,
+    [
+      '#!/usr/bin/env node',
+      'import fs from "node:fs";',
+      'import path from "node:path";',
+      'const outdir = process.argv[process.argv.indexOf("--outdir") + 1];',
+      'const source = process.argv.at(-1);',
+      'const output = path.join(outdir, path.basename(source).replace(/\\.[^.]+$/, ".pdf"));',
+      'fs.writeFileSync(output, `%PDF-1.4\\nconverted:${path.basename(source)}\\n`);',
+    ].join('\n'),
+  );
+  await fs.chmod(fakeOffice, 0o755);
+
+  const { store, db, config } = await createStore({ officeConverterBin: fakeOffice });
+  t.after(() => db.close());
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+  t.after(() => fs.rm(config.dataDir, { recursive: true, force: true }));
+
+  const page = await store.importBuffer({
+    fileName: 'contract.docx',
+    relativePath: 'clients/contract.docx',
+    buffer: Buffer.from('docx-bytes'),
+  });
+  const generated = await store.readPageFile(page);
+
+  assert.equal(page.fileType, 'word');
+  assert.equal(page.mimeType, 'application/pdf');
+  assert.equal(page.title, 'contract');
+  assert.equal(page.directoryName, 'clients');
+  assert.equal(page.fileName, 'contract.docx');
+  assert.equal(path.dirname(page.generatedPath), config.generatedDir);
+  assert.match(path.basename(page.generatedPath), new RegExp(`^\\d{8}-contract-${page.slug}\\.pdf$`));
+  assert.match(generated.toString('utf8'), /^%PDF-1\.4\nconverted:contract\.docx/);
 });
 
 test('imports upload folders with sibling assets and injects a page asset base', async (t) => {

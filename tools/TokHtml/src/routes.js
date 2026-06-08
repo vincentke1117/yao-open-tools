@@ -9,6 +9,8 @@ function sendNotFound(reply, message = 'Not found') {
 function publicPage(page) {
   return {
     ...page,
+    canEdit: page.fileType === 'html',
+    canSync: page.fileType === 'html',
     canEditSource: page.sourceType === 'watch',
   };
 }
@@ -17,6 +19,11 @@ const sessionCookieName = 'tokhtml_session';
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 365 * 10;
 
 async function syncPageToRemote(app, page) {
+  if (page.fileType !== 'html') {
+    const error = new Error('只有 HTML 页面支持上传线上');
+    error.code = 'DOCUMENT_SYNC_UNSUPPORTED';
+    throw error;
+  }
   const settings = app.store.getRemoteSyncSettings(true);
   if (!settings.remoteSyncEnabled || !settings.remoteSyncUrl) {
     const error = new Error('请先在设置中绑定线上程序');
@@ -82,6 +89,11 @@ async function syncPageToRemote(app, page) {
   }
 }
 
+function inlineContentDisposition(fileName) {
+  const fallback = String(fileName || 'document.pdf').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'document.pdf';
+  return `inline; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName || fallback)}`;
+}
+
 function parseCookies(cookieHeader = '') {
   return Object.fromEntries(
     String(cookieHeader || '')
@@ -129,6 +141,17 @@ async function sendGeneratedPage(app, request, reply, rawSlug) {
   const page = app.store.getActivePageBySlug(slug);
   if (!page) return sendNotFound(reply, 'Page not found');
   app.store.incrementAccessCount(page.id);
+  if (request.query?.edit === '1' && page.fileType !== 'html') {
+    return reply.code(400).send({ error: 'Document assets cannot be edited online' });
+  }
+  if (page.fileType !== 'html') {
+    const buffer = await app.store.readPageFile(page);
+    return reply
+      .header('cache-control', 'no-store')
+      .header('content-disposition', inlineContentDisposition(`${page.slug}.pdf`))
+      .type(page.mimeType || 'application/pdf')
+      .send(buffer);
+  }
   const html = await app.store.readPageHtml(page);
   const output = request.query?.edit === '1' ? injectEditBridge(page, html) : html;
   return reply.header('cache-control', 'no-store').type('text/html; charset=utf-8').send(output);
@@ -195,7 +218,7 @@ export function registerRoutes(app) {
   app.get('/api/pages/:id', async (request, reply) => {
     const page = app.store.getPage(request.params.id);
     if (!page) return sendNotFound(reply, 'Page not found');
-    const html = await app.store.readPageHtml(page);
+    const html = page.fileType === 'html' ? await app.store.readPageHtml(page) : '';
     return { page: publicPage(page), html };
   });
 
@@ -216,8 +239,14 @@ export function registerRoutes(app) {
         relativePath,
       });
     }
-    const created = await app.store.importUploadFiles(files);
-    if (!created.length) return reply.code(400).send({ error: 'No HTML files uploaded' });
+    let created;
+    try {
+      created = await app.store.importUploadFiles(files);
+    } catch (error) {
+      if (error.code === 'WORD_CONVERSION_FAILED') return reply.code(422).send({ error: error.message });
+      throw error;
+    }
+    if (!created.length) return reply.code(400).send({ error: 'No supported files uploaded' });
     return reply.code(201).send({ pages: created.map(publicPage) });
   });
 
@@ -247,6 +276,7 @@ export function registerRoutes(app) {
       if (error.code === 'REVISION_CONFLICT') {
         return reply.code(409).send({ error: 'Revision conflict', page: publicPage(error.page) });
       }
+      if (error.code === 'DOCUMENT_NOT_EDITABLE') return reply.code(400).send({ error: error.message });
       if (error.code === 'NOT_FOUND') return sendNotFound(reply, error.message);
       throw error;
     }
@@ -263,6 +293,7 @@ export function registerRoutes(app) {
       const page = app.store.getPage(request.params.id);
       if (!page) return sendNotFound(reply, 'Page not found');
       if (page.deletedAt) return reply.code(400).send({ error: '回收站页面需要恢复后才能上传线上' });
+      if (page.fileType !== 'html') return reply.code(400).send({ error: '只有 HTML 页面支持上传线上' });
       const sync = await syncPageToRemote(app, page);
       if (!sync.ok) return reply.code(502).send({ error: '线上程序返回失败', sync });
       return { sync };

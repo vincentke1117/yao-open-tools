@@ -23,6 +23,8 @@ export function createDb(config) {
       updated_at TEXT NOT NULL,
       revision INTEGER NOT NULL DEFAULT 1,
       generated_path TEXT NOT NULL,
+      file_type TEXT NOT NULL DEFAULT 'html',
+      mime_type TEXT NOT NULL DEFAULT 'text/html; charset=utf-8',
       raw_mtime_ms INTEGER,
       checksum TEXT NOT NULL,
       edited INTEGER NOT NULL DEFAULT 0,
@@ -74,6 +76,12 @@ export function createDb(config) {
   }
   if (!pageColumns.includes('deleted_path')) {
     db.exec('ALTER TABLE pages ADD COLUMN deleted_path TEXT;');
+  }
+  if (!pageColumns.includes('file_type')) {
+    db.exec("ALTER TABLE pages ADD COLUMN file_type TEXT NOT NULL DEFAULT 'html';");
+  }
+  if (!pageColumns.includes('mime_type')) {
+    db.exec("ALTER TABLE pages ADD COLUMN mime_type TEXT NOT NULL DEFAULT 'text/html; charset=utf-8';");
   }
   db.exec('CREATE INDEX IF NOT EXISTS idx_pages_deleted_at ON pages(deleted_at);');
   return db;

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Local Docker-ready HTML manager with preview editing and autosave.",
+  "description": "Local Docker-ready HTML/PDF/Word document manager with preview editing and autosave.",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",

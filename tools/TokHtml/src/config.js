@@ -32,5 +32,6 @@ export function loadConfig(env = process.env) {
     publicDir: path.join(rootDir, 'public'),
     watchDirs: splitPaths(env.TOKHTML_WATCH_DIRS || path.join(rootDir, 'html-inbox')),
     allowSourceWrite: boolEnv(env.TOKHTML_ALLOW_SOURCE_WRITE, false),
+    officeConverterBin: env.TOKHTML_SOFFICE_BIN || 'soffice',
   };
 }

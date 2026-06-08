@@ -97,6 +97,36 @@ test('allows public generated page views but protects edit mode', async (t) => {
   assert.match(editAllowed.body, /tokhtml/);
 });
 
+test('serves uploaded PDF documents publicly and blocks edit mode for non-HTML assets', async (t) => {
+  const { app, dataDir } = await createApp();
+  t.after(async () => {
+    await app.close();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  const page = await app.store.importBuffer({
+    fileName: 'public-report.pdf',
+    relativePath: 'reports/public-report.pdf',
+    buffer: Buffer.from('%PDF-1.4\npublic report\n'),
+  });
+
+  const publicView = await app.inject({ method: 'GET', url: page.url });
+  assert.equal(publicView.statusCode, 200);
+  assert.match(publicView.headers['content-type'], /application\/pdf/);
+  assert.match(publicView.headers['content-disposition'], /inline/);
+  assert.match(publicView.body, /^%PDF-1\.4/);
+
+  const login = await app.inject({
+    method: 'POST',
+    url: '/api/login',
+    payload: { username: 'admin', password: 'tokhtml' },
+  });
+  const editDenied = await app.inject({ method: 'GET', url: `${page.url}?edit=1`, headers: { cookie: sessionCookie(login) } });
+  assert.equal(editDenied.statusCode, 400);
+  assert.equal(editDenied.json().error, 'Document assets cannot be edited online');
+  assert.doesNotMatch(editDenied.body, /tokhtml-edit-panel/);
+});
+
 test('allows changing login username and password from settings', async (t) => {
   const { app, dataDir } = await createApp();
   t.after(async () => {
