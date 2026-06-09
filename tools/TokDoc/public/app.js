@@ -23,6 +23,11 @@ const defaultSettings = {
   trackingCode: '',
   authUsername: 'admin',
   adminPath: '/admin',
+  siteName: 'TokDoc 文档索引',
+  adminName: 'TokDoc',
+  publicSeoTitle: 'TokDoc 文档索引',
+  publicSeoDescription: '公开文档索引，集中阅读 HTML、PDF 与 Word 文档。',
+  publicSeoKeywords: 'TokDoc,文档索引,HTML,PDF,Word',
   publicHomepageEnabled: true,
   remoteSyncEnabled: false,
   remoteSyncUrl: '',
@@ -30,7 +35,9 @@ const defaultSettings = {
 };
 
 let settings = { ...defaultSettings };
-let adminBasePath = normalizeAdminPath(window.location.pathname || defaultSettings.adminPath);
+const initialPath = normalizedPath(window.location.pathname || defaultSettings.adminPath);
+const isSettingsPage = initialPath.endsWith('/settings');
+let adminBasePath = normalizeAdminPath(isSettingsPage ? initialPath.replace(/\/settings$/u, '') : initialPath);
 let session = { authenticated: false, username: '' };
 let activeFilter = 'all';
 let currentPageId = null;
@@ -53,7 +60,6 @@ const els = {
   fileInput: document.querySelector('#fileInput'),
   directoryInput: document.querySelector('#directoryInput'),
   dropZone: document.querySelector('#dropZone'),
-  settingsBackdrop: document.querySelector('#settingsBackdrop'),
   previewBackdrop: document.querySelector('#previewBackdrop'),
   previewFrame: document.querySelector('#previewFrame'),
   trackingCodeInput: document.querySelector('#trackingCodeInput'),
@@ -73,7 +79,25 @@ const els = {
   loginPassword: document.querySelector('#loginPassword'),
   loginError: document.querySelector('#loginError'),
   toast: document.querySelector('#toast'),
+  managerView: document.querySelector('#managerView'),
+  settingsPage: document.querySelector('#settingsPage'),
+  adminHomeLink: document.querySelector('#adminHomeLink'),
+  adminBrandTitle: document.querySelector('#adminBrandTitle'),
+  adminBrandSubtitle: document.querySelector('#adminBrandSubtitle'),
+  openSettings: document.querySelector('#openSettings'),
+  settingsBackLink: document.querySelector('#settingsBackLink'),
+  saveSettingsTop: document.querySelector('#saveSettingsTop'),
+  siteNameInput: document.querySelector('#siteNameInput'),
+  adminNameInput: document.querySelector('#adminNameInput'),
+  publicSeoTitleInput: document.querySelector('#publicSeoTitleInput'),
+  publicSeoDescriptionInput: document.querySelector('#publicSeoDescriptionInput'),
+  publicSeoKeywordsInput: document.querySelector('#publicSeoKeywordsInput'),
 };
+
+function normalizedPath(pathname) {
+  if (pathname === '/') return '/';
+  return String(pathname || '').replace(/\/+$/g, '') || '/';
+}
 
 function normalizeAdminPath(value) {
   const raw = String(value || defaultSettings.adminPath).trim();
@@ -81,9 +105,50 @@ function normalizeAdminPath(value) {
   return candidate.replace(/\/+$/g, '') || defaultSettings.adminPath;
 }
 
+function settingsUrl() {
+  return `${adminBasePath}/settings`;
+}
+
+function managerUrl() {
+  return adminBasePath;
+}
+
+function normalizeWatchPath(value) {
+  const text = String(value || '').trim();
+  if (text === '/') return text;
+  return text.replace(/[\\/]+$/g, '');
+}
+
+function hasWatchDirectory(watchPath) {
+  const normalized = normalizeWatchPath(watchPath);
+  return Boolean(normalized) && watchDirectories.some((item) => normalizeWatchPath(item.path) === normalized);
+}
+
 function applySettings(nextSettings = {}) {
-  settings = { ...defaultSettings, ...nextSettings };
-  adminBasePath = normalizeAdminPath(settings.adminPath || adminBasePath);
+  const hasAdminPath = Object.prototype.hasOwnProperty.call(nextSettings, 'adminPath');
+  settings = { ...settings, ...nextSettings };
+  if (hasAdminPath) adminBasePath = normalizeAdminPath(settings.adminPath || adminBasePath);
+}
+
+function renderShell() {
+  const adminName = settings.adminName || defaultSettings.adminName;
+  if (els.adminHomeLink) els.adminHomeLink.href = managerUrl();
+  if (els.adminBrandTitle) els.adminBrandTitle.textContent = adminName;
+  if (els.adminBrandSubtitle) els.adminBrandSubtitle.textContent = '本地文档管理器 · Docker 运行 · 即开即读';
+  if (els.loginError && document.querySelector('#loginTitle')) document.querySelector('#loginTitle').textContent = `${adminName} 登录`;
+  if (els.openSettings) {
+    els.openSettings.href = settingsUrl();
+    els.openSettings.classList.toggle('btn-blue', isSettingsPage);
+  }
+  if (els.settingsBackLink) els.settingsBackLink.href = managerUrl();
+  document.title = isSettingsPage ? `${adminName} 系统设置` : `${adminName} 本地文档管理器`;
+}
+
+function applyView() {
+  if (els.managerView) els.managerView.hidden = isSettingsPage;
+  if (els.settingsPage) els.settingsPage.hidden = !isSettingsPage;
+  document.body.dataset.view = isSettingsPage ? 'settings' : 'manager';
+  renderShell();
 }
 
 function apiUrl(path) {
@@ -235,6 +300,22 @@ function renderWatchDirectories() {
 }
 
 function renderSettings() {
+  renderShell();
+  if (els.siteNameInput && document.activeElement !== els.siteNameInput) {
+    els.siteNameInput.value = settings.siteName || defaultSettings.siteName;
+  }
+  if (els.adminNameInput && document.activeElement !== els.adminNameInput) {
+    els.adminNameInput.value = settings.adminName || defaultSettings.adminName;
+  }
+  if (els.publicSeoTitleInput && document.activeElement !== els.publicSeoTitleInput) {
+    els.publicSeoTitleInput.value = settings.publicSeoTitle || settings.siteName || defaultSettings.publicSeoTitle;
+  }
+  if (els.publicSeoDescriptionInput && document.activeElement !== els.publicSeoDescriptionInput) {
+    els.publicSeoDescriptionInput.value = settings.publicSeoDescription || defaultSettings.publicSeoDescription;
+  }
+  if (els.publicSeoKeywordsInput && document.activeElement !== els.publicSeoKeywordsInput) {
+    els.publicSeoKeywordsInput.value = settings.publicSeoKeywords || defaultSettings.publicSeoKeywords;
+  }
   if (els.trackingCodeInput && document.activeElement !== els.trackingCodeInput) {
     els.trackingCodeInput.value = settings.trackingCode || '';
   }
@@ -298,12 +379,12 @@ function render() {
           </div>
         </td>
         <td><span class="badge ${fileTypeBadgeClass(page)}">${fileTypeLabel(page)}</span></td>
-        <td>${escapeHtml(page.uploadTime || page.updatedTime || '-')}</td>
+        <td class="time-cell">${escapeHtml(page.uploadTime || page.updatedTime || '-')}</td>
         <td><span class="size-cell">${escapeHtml(formatSize(page.size))}</span></td>
         <td><span class="directory-cell" title="${escapeHtml(page.directoryName || '无目录')}">${escapeHtml(page.directoryName || '-')}</span></td>
         <td><span class="access-cell">${Number(page.accessCount || 0)}</span></td>
         <td><span class="badge ${statusClass}"><span class="status-dot"></span>${statusText}</span></td>
-        <td>
+        <td class="actions-cell">
           <div class="actions">
             ${rowActions}
           </div>
@@ -454,8 +535,10 @@ async function syncPage(id) {
     return;
   }
   if (!settings.remoteSyncEnabled || !settings.remoteSyncUrl) {
-    openLayer(els.settingsBackdrop);
     showToast('请先在设置里绑定线上程序');
+    window.setTimeout(() => {
+      window.location.href = settingsUrl();
+    }, 500);
     return;
   }
   await api(`/api/pages/${encodeURIComponent(id)}/sync`, { method: 'POST' });
@@ -465,6 +548,12 @@ async function syncPage(id) {
 async function saveSettings() {
   const previousAdminPath = adminBasePath;
   const watchPath = document.querySelector('#watchDirInput').value.trim();
+  const shouldAddWatchPath = watchPath && !hasWatchDirectory(watchPath);
+  const siteName = els.siteNameInput?.value.trim() || defaultSettings.siteName;
+  const adminName = els.adminNameInput?.value.trim() || defaultSettings.adminName;
+  const publicSeoTitle = els.publicSeoTitleInput?.value.trim() || siteName;
+  const publicSeoDescription = els.publicSeoDescriptionInput?.value.trim() || defaultSettings.publicSeoDescription;
+  const publicSeoKeywords = els.publicSeoKeywordsInput?.value.trim() || defaultSettings.publicSeoKeywords;
   const trackingCode = els.trackingCodeInput?.value || '';
   const remoteSyncEnabled = Boolean(els.remoteSyncEnabledInput?.checked);
   const remoteSyncUrl = els.remoteSyncUrlInput?.value.trim() || '';
@@ -478,6 +567,11 @@ async function saveSettings() {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      siteName,
+      adminName,
+      publicSeoTitle,
+      publicSeoDescription,
+      publicSeoKeywords,
       trackingCode,
       authUsername,
       authPassword,
@@ -490,8 +584,9 @@ async function saveSettings() {
     }),
   });
   applySettings(settingsResult.settings || settings);
+  renderShell();
   session = { authenticated: true, username: settings.authUsername || authUsername };
-  if (watchPath) {
+  if (shouldAddWatchPath) {
     await api('/api/watch-dirs', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -499,14 +594,14 @@ async function saveSettings() {
     });
   }
   await loadData();
-  closeLayer(els.settingsBackdrop);
   if (els.authPasswordInput) els.authPasswordInput.value = '';
   if (els.currentPasswordInput) els.currentPasswordInput.value = '';
   if (els.remoteSyncTokenInput) els.remoteSyncTokenInput.value = '';
-  showToast(adminBasePath !== previousAdminPath ? `后台地址已更新：${adminBasePath}` : watchPath ? '设置已保存，监听目录已扫描' : '设置已保存');
-  if (adminBasePath !== previousAdminPath && normalizeAdminPath(window.location.pathname) !== adminBasePath) {
+  showToast(adminBasePath !== previousAdminPath ? `后台地址已更新：${adminBasePath}` : shouldAddWatchPath ? '设置已保存，监听目录已扫描' : '设置已保存');
+  const nextPath = isSettingsPage ? settingsUrl() : managerUrl();
+  if (adminBasePath !== previousAdminPath && normalizedPath(window.location.pathname) !== nextPath) {
     window.setTimeout(() => {
-      window.location.href = adminBasePath;
+      window.location.href = nextPath;
     }, 700);
   }
 }
@@ -551,7 +646,12 @@ async function logout() {
 }
 
 async function bootstrap() {
+  applyView();
   const result = await api('/api/session');
+  if (result.publicSettings) {
+    applySettings(result.publicSettings);
+    renderShell();
+  }
   session = { authenticated: Boolean(result.authenticated), username: result.username || '' };
   if (!session.authenticated) {
     showLogin();
@@ -580,7 +680,10 @@ function showToast(message) {
 
 document.querySelector('#pickFiles').addEventListener('click', () => els.fileInput.click());
 document.querySelector('#pickDirectory').addEventListener('click', () => els.directoryInput.click());
-document.querySelector('#addWatchDirectory')?.addEventListener('click', () => openLayer(els.settingsBackdrop));
+document.querySelector('#addWatchDirectory')?.addEventListener('click', () => {
+  document.querySelector('#watchDirInput')?.focus();
+  showToast('填写目录后保存即可导入监听');
+});
 document.querySelector('#addSample').addEventListener('click', () => addSamples().catch((error) => showToast(error.message)));
 document.querySelector('#refreshList').addEventListener('click', () => loadData().then(() => showToast('列表已刷新')));
 
@@ -649,10 +752,16 @@ els.watchList.addEventListener('click', async (event) => {
   }
 });
 
-document.querySelector('#openSettings').addEventListener('click', () => openLayer(els.settingsBackdrop));
-document.querySelector('#openSettingsSide')?.addEventListener('click', () => openLayer(els.settingsBackdrop));
-document.querySelector('#closeSettings').addEventListener('click', () => closeLayer(els.settingsBackdrop));
+document.querySelector('#openSettings').addEventListener('click', (event) => {
+  event.preventDefault();
+  window.location.href = settingsUrl();
+});
+document.querySelector('#openSettingsSide')?.addEventListener('click', () => {
+  document.querySelector('#watchDirInput')?.focus();
+  showToast('目录策略已在当前设置页');
+});
 document.querySelector('#saveSettings').addEventListener('click', () => saveSettings().catch((error) => showToast(error.message)));
+els.saveSettingsTop?.addEventListener('click', () => saveSettings().catch((error) => showToast(error.message)));
 els.loginForm.addEventListener('submit', (event) => login(event));
 els.logoutButton.addEventListener('click', () => logout().catch((error) => showToast(error.message)));
 
@@ -660,7 +769,7 @@ document.querySelector('#closePreview').addEventListener('click', () => closeLay
 document.querySelector('#editFromPreview').addEventListener('click', () => openEditor(currentPageId));
 document.querySelector('#copyFromPreview').addEventListener('click', () => copyUrl(currentPageId));
 
-[els.settingsBackdrop, els.previewBackdrop].forEach((layer) => {
+[els.previewBackdrop].forEach((layer) => {
   layer.addEventListener('click', (event) => {
     if (event.target === layer) closeLayer(layer);
   });
@@ -668,7 +777,7 @@ document.querySelector('#copyFromPreview').addEventListener('click', () => copyU
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
-  [els.settingsBackdrop, els.previewBackdrop].forEach(closeLayer);
+  [els.previewBackdrop].forEach(closeLayer);
 });
 
 bootstrap().catch((error) => showToast(error.message));

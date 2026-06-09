@@ -170,6 +170,10 @@ function safeDestination(root, relativePath) {
 
 const defaultAuthUsername = 'admin';
 const defaultAuthPassword = 'tokdoc';
+const defaultSiteName = 'TokDoc 文档索引';
+const defaultAdminName = 'TokDoc';
+const defaultPublicSeoDescription = '公开文档索引，集中阅读 HTML、PDF 与 Word 文档。';
+const defaultPublicSeoKeywords = 'TokDoc,文档索引,HTML,PDF,Word';
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('base64url');
@@ -593,6 +597,11 @@ export class PageStore {
       trackingCode: '',
       authUsername: auth.authUsername,
       adminPath: this.getAdminPath(),
+      siteName: defaultSiteName,
+      adminName: defaultAdminName,
+      publicSeoTitle: defaultSiteName,
+      publicSeoDescription: defaultPublicSeoDescription,
+      publicSeoKeywords: defaultPublicSeoKeywords,
       publicHomepageEnabled: true,
       remoteSyncEnabled: false,
       remoteSyncUrl: '',
@@ -600,12 +609,29 @@ export class PageStore {
     };
     for (const row of rows) {
       if (row.key === 'tracking_code') settings.trackingCode = row.value || '';
+      if (row.key === 'site_name') settings.siteName = row.value || defaultSiteName;
+      if (row.key === 'admin_name') settings.adminName = row.value || defaultAdminName;
+      if (row.key === 'public_seo_title') settings.publicSeoTitle = row.value || settings.siteName || defaultSiteName;
+      if (row.key === 'public_seo_description') settings.publicSeoDescription = row.value || defaultPublicSeoDescription;
+      if (row.key === 'public_seo_keywords') settings.publicSeoKeywords = row.value || defaultPublicSeoKeywords;
       if (row.key === 'public_homepage_enabled') settings.publicHomepageEnabled = row.value !== '0';
       if (row.key === 'remote_sync_enabled') settings.remoteSyncEnabled = row.value === '1';
       if (row.key === 'remote_sync_url') settings.remoteSyncUrl = row.value || '';
       if (row.key === 'remote_sync_token') settings.remoteSyncHasToken = Boolean(row.value);
     }
     return settings;
+  }
+
+  getPublicSettings() {
+    const settings = this.getSettings();
+    return {
+      siteName: settings.siteName,
+      adminName: settings.adminName,
+      publicSeoTitle: settings.publicSeoTitle,
+      publicSeoDescription: settings.publicSeoDescription,
+      publicSeoKeywords: settings.publicSeoKeywords,
+      publicHomepageEnabled: settings.publicHomepageEnabled,
+    };
   }
 
   getRemoteSyncSettings(includeSensitive = false) {
@@ -624,6 +650,21 @@ export class PageStore {
            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
         )
         .run('tracking_code', String(settings.trackingCode || ''), now);
+    }
+    if (Object.prototype.hasOwnProperty.call(settings, 'siteName')) {
+      this.setSetting('site_name', String(settings.siteName || defaultSiteName).trim() || defaultSiteName, now);
+    }
+    if (Object.prototype.hasOwnProperty.call(settings, 'adminName')) {
+      this.setSetting('admin_name', String(settings.adminName || defaultAdminName).trim() || defaultAdminName, now);
+    }
+    if (Object.prototype.hasOwnProperty.call(settings, 'publicSeoTitle')) {
+      this.setSetting('public_seo_title', String(settings.publicSeoTitle || '').trim(), now);
+    }
+    if (Object.prototype.hasOwnProperty.call(settings, 'publicSeoDescription')) {
+      this.setSetting('public_seo_description', String(settings.publicSeoDescription || '').trim(), now);
+    }
+    if (Object.prototype.hasOwnProperty.call(settings, 'publicSeoKeywords')) {
+      this.setSetting('public_seo_keywords', String(settings.publicSeoKeywords || '').trim(), now);
     }
     if (Object.prototype.hasOwnProperty.call(settings, 'authUsername')) {
       const username = String(settings.authUsername || '').trim();
