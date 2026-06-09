@@ -69,5 +69,7 @@ export function loadConfig(env = process.env, appRoot = defaultRootDir) {
     allowSourceWrite: boolEnv(envValue(env, 'TOKDOC_ALLOW_SOURCE_WRITE', 'TOKHTML_ALLOW_SOURCE_WRITE', ''), false),
     officeConverterBin: envValue(env, 'TOKDOC_SOFFICE_BIN', 'TOKHTML_SOFFICE_BIN', 'soffice'),
     adminPathOverride: env.TOKDOC_ADMIN_PATH ? safeAdminPath(env.TOKDOC_ADMIN_PATH) : '',
+    initialAuthUsername: String(env.TOKDOC_INITIAL_USERNAME || '').trim(),
+    initialAuthPassword: String(env.TOKDOC_INITIAL_PASSWORD || ''),
   };
 }

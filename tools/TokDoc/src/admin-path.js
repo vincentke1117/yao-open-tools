@@ -1,6 +1,6 @@
 export const defaultAdminPath = '/admin';
 
-const reservedAdminPaths = new Set(['/api', '/assets', '/page-assets', '/pages', '/favicon.ico']);
+const reservedAdminPaths = new Set(['/api', '/assets', '/page-assets', '/pages', '/public', '/type', '/favicon.ico']);
 
 export function normalizeAdminPath(value = defaultAdminPath) {
   const raw = String(value || defaultAdminPath).trim();

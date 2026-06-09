@@ -6,8 +6,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { buildApp } from '../src/server.js';
 
-async function createApp() {
-  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tokdoc-auth-'));
+async function createApp(overrides = {}) {
+  const dataDir = overrides.dataDir || (await fs.mkdtemp(path.join(os.tmpdir(), 'tokdoc-auth-')));
   const config = {
     name: 'tokdoc',
     rootDir: dataDir,
@@ -20,9 +20,10 @@ async function createApp() {
     publicDir: path.join(process.cwd(), 'public'),
     watchDirs: [path.join(dataDir, 'watch')],
     allowSourceWrite: false,
+    ...overrides,
   };
   const app = await buildApp(config);
-  return { app, dataDir };
+  return { app, dataDir, config };
 }
 
 function sessionCookie(response) {
@@ -43,8 +44,8 @@ test('requires login for management APIs and keeps a long-lived session cookie',
   });
 
   const root = await app.inject({ method: 'GET', url: '/' });
-  assert.equal(root.statusCode, 302);
-  assert.equal(root.headers.location, '/admin');
+  assert.equal(root.statusCode, 200);
+  assert.match(root.body, /TokDoc 文档索引/);
 
   const admin = await app.inject({ method: 'GET', url: '/admin' });
   assert.equal(admin.statusCode, 200);
@@ -53,6 +54,10 @@ test('requires login for management APIs and keeps a long-lived session cookie',
   const health = await app.inject({ method: 'GET', url: '/api/health' });
   assert.equal(health.statusCode, 200);
   assert.equal(health.json().name, 'tokdoc');
+
+  const healthz = await app.inject({ method: 'GET', url: '/healthz' });
+  assert.equal(healthz.statusCode, 200);
+  assert.equal(healthz.json().name, 'tokdoc');
 
   const denied = await app.inject({ method: 'GET', url: '/api/pages' });
   assert.equal(denied.statusCode, 401);
@@ -84,6 +89,52 @@ test('requires login for management APIs and keeps a long-lived session cookie',
   const logoutCookies = String(logout.headers['set-cookie']);
   assert.match(logoutCookies, /tokdoc_session=.*Max-Age=0/);
   assert.match(logoutCookies, /tokhtml_session=.*Max-Age=0/);
+});
+
+test('uses initial login credentials for a fresh database without overriding existing settings', async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tokdoc-auth-initial-'));
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+
+  const first = await createApp({
+    dataDir,
+    initialAuthUsername: 'owner',
+    initialAuthPassword: 'first-secret',
+  });
+  const oldDefaultLogin = await first.app.inject({
+    method: 'POST',
+    url: '/api/login',
+    payload: { username: 'admin', password: 'tokdoc' },
+  });
+  assert.equal(oldDefaultLogin.statusCode, 401);
+
+  const initialLogin = await first.app.inject({
+    method: 'POST',
+    url: '/api/login',
+    payload: { username: 'owner', password: 'first-secret' },
+  });
+  assert.equal(initialLogin.statusCode, 200);
+  await first.app.close();
+
+  const second = await createApp({
+    dataDir,
+    initialAuthUsername: 'other',
+    initialAuthPassword: 'other-secret',
+  });
+  t.after(() => second.app.close());
+
+  const existingLogin = await second.app.inject({
+    method: 'POST',
+    url: '/api/login',
+    payload: { username: 'owner', password: 'first-secret' },
+  });
+  assert.equal(existingLogin.statusCode, 200);
+
+  const newInitialLogin = await second.app.inject({
+    method: 'POST',
+    url: '/api/login',
+    payload: { username: 'other', password: 'other-secret' },
+  });
+  assert.equal(newInitialLogin.statusCode, 401);
 });
 
 test('moves the management console and APIs under a custom admin path', async (t) => {
@@ -118,6 +169,22 @@ test('moves the management console and APIs under a custom admin path', async (t
   });
   assert.equal(reservedPath.statusCode, 400);
 
+  const reservedPublicPath = await app.inject({
+    method: 'PATCH',
+    url: '/admin/api/settings',
+    headers: { cookie },
+    payload: { adminPath: '/public', currentPassword: 'tokdoc' },
+  });
+  assert.equal(reservedPublicPath.statusCode, 400);
+
+  const reservedTypePath = await app.inject({
+    method: 'PATCH',
+    url: '/admin/api/settings',
+    headers: { cookie },
+    payload: { adminPath: '/type', currentPassword: 'tokdoc' },
+  });
+  assert.equal(reservedTypePath.statusCode, 400);
+
   const saved = await app.inject({
     method: 'PATCH',
     url: '/admin/api/settings',
@@ -128,7 +195,8 @@ test('moves the management console and APIs under a custom admin path', async (t
   assert.equal(saved.json().settings.adminPath, '/tok-ops');
 
   const hiddenRoot = await app.inject({ method: 'GET', url: '/' });
-  assert.equal(hiddenRoot.statusCode, 404);
+  assert.equal(hiddenRoot.statusCode, 200);
+  assert.match(hiddenRoot.body, /TokDoc 文档索引/);
 
   const oldAdmin = await app.inject({ method: 'GET', url: '/admin' });
   assert.equal(oldAdmin.statusCode, 404);
@@ -172,6 +240,90 @@ test('moves the management console and APIs under a custom admin path', async (t
   assert.equal(editView.statusCode, 200);
   assert.match(editView.body, new RegExp(`/tok-ops/api/pages/${page.id}/content`));
   assert.match(editView.body, /href="\/tok-ops"/);
+});
+
+test('serves a public document index and filters public API fields without login', async (t) => {
+  const { app, dataDir } = await createApp();
+  t.after(async () => {
+    await app.close();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  const htmlPage = await app.store.importBuffer({
+    fileName: 'public-index-html.html',
+    relativePath: 'docs/public-index-html.html',
+    buffer: Buffer.from('<!doctype html><html><head><title>公开索引 HTML</title></head><body><h1>公开索引 HTML</h1></body></html>'),
+  });
+  const pdfPage = await app.store.importBuffer({
+    fileName: 'public-index-pdf.pdf',
+    relativePath: 'pdf/public-index-pdf.pdf',
+    buffer: Buffer.from('%PDF-1.4\npublic index pdf\n'),
+  });
+  const trashPage = await app.store.importBuffer({
+    fileName: 'public-index-trash.html',
+    relativePath: 'trash/public-index-trash.html',
+    buffer: Buffer.from('<!doctype html><html><head><title>公开索引回收站</title></head><body><h1>公开索引回收站</h1></body></html>'),
+  });
+  await app.store.deletePage(trashPage.id);
+
+  const publicHome = await app.inject({ method: 'GET', url: '/' });
+  assert.equal(publicHome.statusCode, 200);
+  assert.match(publicHome.body, /id="typeTabs"/);
+  assert.match(publicHome.body, /\/assets\/public-app\.js/);
+
+  const typePage = await app.inject({ method: 'GET', url: '/type/html' });
+  assert.equal(typePage.statusCode, 200);
+  assert.match(typePage.body, /TokDoc 文档索引/);
+
+  const publicApi = await app.inject({ method: 'GET', url: '/public/api/pages' });
+  assert.equal(publicApi.statusCode, 200);
+  const body = publicApi.json();
+  assert.equal(body.pagination.total, 2);
+  assert.deepEqual(body.stats, { all: 2, html: 1, pdf: 1, word: 0 });
+  assert.equal(body.pages.some((page) => page.slug === htmlPage.slug), true);
+  assert.equal(body.pages.some((page) => page.slug === pdfPage.slug), true);
+  assert.equal(body.pages.some((page) => page.slug === trashPage.slug), false);
+  assert.equal(Object.hasOwn(body.pages[0], 'id'), false);
+  assert.equal(Object.hasOwn(body.pages[0], 'sourcePath'), false);
+  assert.equal(Object.hasOwn(body.pages[0], 'generatedPath'), false);
+  assert.equal(Object.hasOwn(body.pages[0], 'editUrl'), false);
+  assert.equal(Object.hasOwn(body.pages[0], 'canEdit'), false);
+  assert.equal(Object.hasOwn(body.pages[0], 'revision'), false);
+
+  const htmlApi = await app.inject({ method: 'GET', url: '/public/api/pages?type=html' });
+  assert.equal(htmlApi.statusCode, 200);
+  assert.equal(htmlApi.json().pages.length, 1);
+  assert.equal(htmlApi.json().pages[0].fileType, 'html');
+
+  const searched = await app.inject({ method: 'GET', url: '/public/api/pages?q=PDF' });
+  assert.equal(searched.statusCode, 200);
+  assert.equal(searched.json().pages.length, 1);
+  assert.equal(searched.json().pages[0].slug, pdfPage.slug);
+});
+
+test('can disable the public homepage while keeping document short links available', async (t) => {
+  const { app, dataDir } = await createApp();
+  t.after(async () => {
+    await app.close();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  const page = await app.store.importBuffer({
+    fileName: 'public-disabled.html',
+    relativePath: 'public-disabled.html',
+    buffer: Buffer.from('<!doctype html><html><head><title>公开关闭后短链</title></head><body><h1>公开关闭后短链</h1></body></html>'),
+  });
+  await app.store.saveSettings({ publicHomepageEnabled: false });
+
+  const publicHome = await app.inject({ method: 'GET', url: '/' });
+  assert.equal(publicHome.statusCode, 404);
+
+  const publicApi = await app.inject({ method: 'GET', url: '/public/api/pages' });
+  assert.equal(publicApi.statusCode, 404);
+
+  const shortLink = await app.inject({ method: 'GET', url: page.url });
+  assert.equal(shortLink.statusCode, 200);
+  assert.match(shortLink.body, /公开关闭后短链/);
 });
 
 test('allows public generated page views but protects edit mode', async (t) => {
@@ -237,6 +389,26 @@ test('serves uploaded PDF documents publicly and blocks edit mode for non-HTML a
   assert.equal(editDenied.statusCode, 400);
   assert.equal(editDenied.json().error, 'Document assets cannot be edited online');
   assert.doesNotMatch(editDenied.body, /tokdoc-edit-panel/);
+});
+
+test('serves generated documents when stored paths still point to Docker data directories', async (t) => {
+  const { app, dataDir } = await createApp();
+  t.after(async () => {
+    await app.close();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  const page = await app.store.importBuffer({
+    fileName: 'docker-path-report.pdf',
+    relativePath: 'reports/docker-path-report.pdf',
+    buffer: Buffer.from('%PDF-1.4\ndocker path report\n'),
+  });
+  app.store.db.prepare('UPDATE pages SET generated_path = ? WHERE id = ?').run(`/app/data/pages/${path.basename(page.generatedPath)}`, page.id);
+
+  const publicView = await app.inject({ method: 'GET', url: page.url });
+  assert.equal(publicView.statusCode, 200);
+  assert.match(publicView.headers['content-type'], /application\/pdf/);
+  assert.match(publicView.body, /^%PDF-1\.4/);
 });
 
 test('allows changing login username and password from settings', async (t) => {

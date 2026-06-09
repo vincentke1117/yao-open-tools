@@ -61,6 +61,16 @@ function generatedFileNameForAsset(page, extension = 'html') {
   return `${dateStamp(page.createdAt)}-${cleanName}-${page.slug}.${extension.replace(/^\./, '')}`;
 }
 
+async function pathExists(filePath) {
+  if (!filePath) return false;
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function rowToPage(row) {
   if (!row) return null;
   const fileType = row.file_type || 'html';
@@ -108,6 +118,25 @@ function rowToWatchDir(row) {
     lastScan: row.last_scan_at ? displayTime(row.last_scan_at) : '等待扫描',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function isPublicListablePage(page) {
+  return Boolean(page && !page.deletedAt && ['published', 'edited'].includes(page.status));
+}
+
+function publicPageSummary(page) {
+  return {
+    slug: page.slug,
+    title: page.title,
+    fileName: page.fileName,
+    fileType: page.fileType,
+    directoryName: page.directoryName || '',
+    size: page.size,
+    uploadTime: page.uploadTime,
+    updatedTime: page.updatedTime,
+    accessCount: page.accessCount,
+    url: page.url,
   };
 }
 
@@ -198,13 +227,16 @@ export class PageStore {
     const q = String(filters.q || '').trim().toLowerCase();
     const status = String(filters.status || 'all');
     const directory = String(filters.directory || '').trim();
+    const requestedType = String(filters.type || filters.fileType || 'all').trim().toLowerCase();
+    const sort = String(filters.sort || 'updated_desc');
     const scope = String(filters.scope || 'active');
     const wantsTrash = scope === 'trash' || status === 'trashed';
-    return rows
+    const pages = rows
       .map(rowToPage)
       .filter((page) => {
         if (wantsTrash && !page.deletedAt) return false;
         if (!wantsTrash && page.deletedAt) return false;
+        const matchesType = requestedType === 'all' || !requestedType || page.fileType === requestedType;
         const matchesStatus =
           wantsTrash ||
           status === 'all' ||
@@ -213,8 +245,15 @@ export class PageStore {
           (status === 'edited' && page.edited);
         const matchesDirectory = !directory || page.directoryName === directory;
         const haystack = `${page.id} ${page.slug} ${page.fileName} ${page.title} ${page.directoryName} ${page.url}`.toLowerCase();
-        return matchesStatus && matchesDirectory && (!q || haystack.includes(q));
+        return matchesType && matchesStatus && matchesDirectory && (!q || haystack.includes(q));
       });
+    if (sort === 'created_desc') {
+      return pages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+    if (sort === 'access_desc') {
+      return pages.sort((a, b) => b.accessCount - a.accessCount || new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    }
+    return pages.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }
 
   listPagesPage(filters = {}) {
@@ -240,6 +279,46 @@ export class PageStore {
     };
   }
 
+  publicPageStats() {
+    const stats = { all: 0, html: 0, pdf: 0, word: 0 };
+    for (const page of this.listPages({ scope: 'active', status: 'all' }).filter(isPublicListablePage)) {
+      stats.all += 1;
+      if (Object.hasOwn(stats, page.fileType)) stats[page.fileType] += 1;
+    }
+    return stats;
+  }
+
+  listPublicPagesPage(filters = {}) {
+    const type = String(filters.type || filters.fileType || 'all').trim().toLowerCase();
+    const normalizedType = ['html', 'pdf', 'word'].includes(type) ? type : 'all';
+    const allFilteredPages = this.listPages({
+      ...filters,
+      scope: 'active',
+      status: 'all',
+      type: normalizedType,
+    }).filter(isPublicListablePage);
+    const requestedPageSize = Number(filters.pageSize || 10);
+    const pageSize = Number.isFinite(requestedPageSize) ? Math.min(Math.max(Math.trunc(requestedPageSize), 1), 100) : 10;
+    const total = allFilteredPages.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const requestedPage = Number(filters.page || 1);
+    const page = Number.isFinite(requestedPage) ? Math.min(Math.max(Math.trunc(requestedPage), 1), totalPages) : 1;
+    const offset = (page - 1) * pageSize;
+    return {
+      pages: allFilteredPages.slice(offset, offset + pageSize).map(publicPageSummary),
+      stats: this.publicPageStats(),
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages,
+        offset,
+        hasPrev: page > 1,
+        hasNext: page < totalPages,
+      },
+    };
+  }
+
   getPage(id) {
     return rowToPage(this.db.prepare('SELECT * FROM pages WHERE id = ?').get(id));
   }
@@ -253,11 +332,30 @@ export class PageStore {
   }
 
   async readPageHtml(page) {
-    return fs.readFile(page.generatedPath, 'utf8');
+    return fs.readFile(await this.resolveGeneratedPath(page), 'utf8');
   }
 
   async readPageFile(page) {
-    return fs.readFile(page.generatedPath);
+    return fs.readFile(await this.resolveGeneratedPath(page));
+  }
+
+  async resolveGeneratedPath(page) {
+    if (!page?.generatedPath) return page?.generatedPath;
+    return this.resolveManagedPath(page.generatedPath);
+  }
+
+  async resolveManagedPath(storedPath) {
+    if (!storedPath) return storedPath;
+    if (await pathExists(storedPath)) return storedPath;
+    const normalized = String(storedPath || '').replace(/\\/g, '/');
+    const fileName = path.basename(storedPath);
+    const candidates = [];
+    if (normalized.includes('/trash/')) candidates.push(path.join(this.trashDir(), 'generated', fileName));
+    if (normalized.includes('/pages/') || !candidates.length) candidates.push(path.join(this.config.generatedDir, fileName));
+    for (const candidate of candidates) {
+      if (candidate !== storedPath && (await pathExists(candidate))) return candidate;
+    }
+    return storedPath;
   }
 
   async importBuffer({ fileName, buffer, relativePath = '' }) {
@@ -495,12 +593,14 @@ export class PageStore {
       trackingCode: '',
       authUsername: auth.authUsername,
       adminPath: this.getAdminPath(),
+      publicHomepageEnabled: true,
       remoteSyncEnabled: false,
       remoteSyncUrl: '',
       remoteSyncHasToken: false,
     };
     for (const row of rows) {
       if (row.key === 'tracking_code') settings.trackingCode = row.value || '';
+      if (row.key === 'public_homepage_enabled') settings.publicHomepageEnabled = row.value !== '0';
       if (row.key === 'remote_sync_enabled') settings.remoteSyncEnabled = row.value === '1';
       if (row.key === 'remote_sync_url') settings.remoteSyncUrl = row.value || '';
       if (row.key === 'remote_sync_token') settings.remoteSyncHasToken = Boolean(row.value);
@@ -536,6 +636,9 @@ export class PageStore {
     if (Object.prototype.hasOwnProperty.call(settings, 'adminPath')) {
       this.setSetting('admin_path', normalizeAdminPath(settings.adminPath || defaultAdminPath), now);
     }
+    if (Object.prototype.hasOwnProperty.call(settings, 'publicHomepageEnabled')) {
+      this.setSetting('public_homepage_enabled', settings.publicHomepageEnabled ? '1' : '0', now);
+    }
     if (Object.prototype.hasOwnProperty.call(settings, 'remoteSyncEnabled')) {
       this.setSetting('remote_sync_enabled', settings.remoteSyncEnabled ? '1' : '0', now);
     }
@@ -569,8 +672,10 @@ export class PageStore {
 
   ensureAuthSettings() {
     const now = nowIso();
-    if (!this.settingValue('auth_username')) this.setSetting('auth_username', defaultAuthUsername, now);
-    if (!this.settingValue('auth_password_hash')) this.setSetting('auth_password_hash', hashPassword(defaultAuthPassword), now);
+    const initialUsername = String(this.config.initialAuthUsername || defaultAuthUsername).trim() || defaultAuthUsername;
+    const initialPassword = this.config.initialAuthPassword || defaultAuthPassword;
+    if (!this.settingValue('auth_username')) this.setSetting('auth_username', initialUsername, now);
+    if (!this.settingValue('auth_password_hash')) this.setSetting('auth_password_hash', hashPassword(initialPassword), now);
     if (!this.settingValue('auth_secret')) this.setSetting('auth_secret', crypto.randomBytes(32).toString('base64url'), now);
   }
 
@@ -773,7 +878,8 @@ export class PageStore {
     await this.writeVersion(page, currentContent, reason);
     const nextContent = removeEditBridge(html || composeDocument(title || page.title, body || ''));
     const parsed = parseHtmlMetadata(nextContent, page.fileName);
-    await fs.writeFile(page.generatedPath, nextContent);
+    const generatedPath = await this.resolveGeneratedPath(page);
+    await fs.writeFile(generatedPath, nextContent);
     const watchDir = this.watchDirForPath(page.sourcePath);
     if (page.sourceType === 'watch' && watchDir?.allowWrite) {
       await fs.writeFile(page.sourcePath, nextContent);
@@ -781,10 +887,10 @@ export class PageStore {
     const now = nowIso();
     this.db
       .prepare(
-        `UPDATE pages SET title = ?, size = ?, status = ?, updated_at = ?, revision = revision + 1,
+        `UPDATE pages SET title = ?, size = ?, status = ?, updated_at = ?, revision = revision + 1, generated_path = ?,
          checksum = ?, edited = 1 WHERE id = ?`,
       )
-      .run(parsed.title, Buffer.byteLength(nextContent), 'edited', now, checksum(nextContent), id);
+      .run(parsed.title, Buffer.byteLength(nextContent), 'edited', now, generatedPath, checksum(nextContent), id);
     return this.getPage(id);
   }
 
@@ -861,7 +967,7 @@ export class PageStore {
     await fs.mkdir(trashGeneratedDir, { recursive: true });
     const trashPath = path.join(trashGeneratedDir, `${page.id}-${page.slug}.${generatedExtensionForPage(page)}`);
     try {
-      await fs.rename(page.generatedPath, trashPath);
+      await fs.rename(await this.resolveGeneratedPath(page), trashPath);
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
     }
@@ -877,7 +983,8 @@ export class PageStore {
     if (!page.deletedAt) return page;
     const restoredPath = path.join(this.config.generatedDir, generatedFileNameForAsset(page, generatedExtensionForPage(page)));
     await fs.mkdir(path.dirname(restoredPath), { recursive: true });
-    const sourcePath = page.generatedPath || page.deletedPath;
+    let sourcePath = await this.resolveGeneratedPath(page);
+    if (!(await pathExists(sourcePath)) && page.deletedPath) sourcePath = await this.resolveManagedPath(page.deletedPath);
     try {
       await fs.rename(sourcePath, restoredPath);
     } catch (error) {

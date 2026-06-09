@@ -75,6 +75,25 @@ test('imports uploaded PDF as a public readable document asset', async (t) => {
   assert.deepEqual(await store.readPageFile(page), pdfBytes);
 });
 
+test('reads generated assets after Docker absolute paths move to the local data directory', async (t) => {
+  const { store, db, dataDir } = await createStore();
+  t.after(() => db.close());
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+
+  const pdfBytes = Buffer.from('%PDF-1.4\nportable path report\n');
+  const page = await store.importBuffer({
+    fileName: 'portable-report.pdf',
+    relativePath: 'docs/portable-report.pdf',
+    buffer: pdfBytes,
+  });
+  const dockerPath = `/app/data/pages/${path.basename(page.generatedPath)}`;
+  db.prepare('UPDATE pages SET generated_path = ? WHERE id = ?').run(dockerPath, page.id);
+
+  const stalePage = store.getPage(page.id);
+  assert.equal(stalePage.generatedPath, dockerPath);
+  assert.deepEqual(await store.readPageFile(stalePage), pdfBytes);
+});
+
 test('imports uploaded Word documents by converting them to readable PDF assets', async (t) => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tokdoc-office-'));
   const fakeOffice = path.join(dataDir, 'fake-soffice.mjs');
@@ -267,6 +286,87 @@ test('paginates page list with a default page size of 20', async (t) => {
   assert.equal(firstPage.pagination.totalPages, 2);
   assert.equal(secondPage.pages.length, 5);
   assert.equal(secondPage.pagination.page, 2);
+});
+
+test('builds a public page list with type filters and public-only fields', async (t) => {
+  const { store, db, dataDir } = await createStore();
+  t.after(() => db.close());
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+
+  const htmlPage = await store.importBuffer({
+    fileName: 'public-html.html',
+    relativePath: 'docs/public-html.html',
+    buffer: Buffer.from('<!doctype html><html><head><title>公开 HTML</title></head><body><h1>公开 HTML</h1></body></html>'),
+  });
+  await store.importBuffer({
+    fileName: 'public-pdf.pdf',
+    relativePath: 'docs/public-pdf.pdf',
+    buffer: Buffer.from('%PDF-1.4\npublic pdf\n'),
+  });
+  const trashed = await store.importBuffer({
+    fileName: 'trashed.html',
+    relativePath: 'trash/trashed.html',
+    buffer: Buffer.from('<!doctype html><html><head><title>不公开</title></head><body><h1>不公开</h1></body></html>'),
+  });
+  await store.deletePage(trashed.id);
+  store.incrementAccessCount(htmlPage.id);
+  store.incrementAccessCount(htmlPage.id);
+
+  const all = store.listPublicPagesPage();
+  assert.equal(all.pages.length, 2);
+  assert.equal(all.pagination.pageSize, 10);
+  assert.deepEqual(all.stats, { all: 2, html: 1, pdf: 1, word: 0 });
+  assert.equal(all.pages[0].url.startsWith('/'), true);
+  assert.equal(Object.hasOwn(all.pages[0], 'id'), false);
+  assert.equal(Object.hasOwn(all.pages[0], 'sourcePath'), false);
+  assert.equal(Object.hasOwn(all.pages[0], 'generatedPath'), false);
+  assert.equal(Object.hasOwn(all.pages[0], 'editUrl'), false);
+  assert.equal(Object.hasOwn(all.pages[0], 'revision'), false);
+
+  const html = store.listPublicPagesPage({ type: 'html' });
+  assert.equal(html.pages.length, 1);
+  assert.equal(html.pages[0].fileType, 'html');
+  assert.equal(html.pages[0].accessCount, 2);
+
+  const pdf = store.listPublicPagesPage({ type: 'pdf' });
+  assert.equal(pdf.pages.length, 1);
+  assert.equal(pdf.pages[0].fileType, 'pdf');
+});
+
+test('paginates the public document list with a default page size of 10', async (t) => {
+  const { store, db, dataDir } = await createStore();
+  t.after(() => db.close());
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+
+  for (let index = 1; index <= 12; index += 1) {
+    await store.importBuffer({
+      fileName: `public-${String(index).padStart(2, '0')}.html`,
+      relativePath: `public-${String(index).padStart(2, '0')}.html`,
+      buffer: Buffer.from(`<!doctype html><html><head><title>公开文档 ${index}</title></head><body><h1>公开文档 ${index}</h1></body></html>`),
+    });
+  }
+
+  const firstPage = store.listPublicPagesPage();
+  const secondPage = store.listPublicPagesPage({ page: 2 });
+
+  assert.equal(firstPage.pages.length, 10);
+  assert.equal(firstPage.pagination.pageSize, 10);
+  assert.equal(firstPage.pagination.total, 12);
+  assert.equal(firstPage.pagination.totalPages, 2);
+  assert.equal(secondPage.pages.length, 2);
+  assert.equal(secondPage.pagination.page, 2);
+});
+
+test('stores the public homepage setting with an enabled default', async (t) => {
+  const { store, db, dataDir } = await createStore();
+  t.after(() => db.close());
+  t.after(() => fs.rm(dataDir, { recursive: true, force: true }));
+
+  assert.equal(store.getSettings().publicHomepageEnabled, true);
+  await store.saveSettings({ publicHomepageEnabled: false });
+  assert.equal(store.getSettings().publicHomepageEnabled, false);
+  await store.saveSettings({ publicHomepageEnabled: true });
+  assert.equal(store.getSettings().publicHomepageEnabled, true);
 });
 
 test('tracks page access count for generated HTML views', async (t) => {

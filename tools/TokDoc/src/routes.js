@@ -140,6 +140,10 @@ function isActiveAdminApiPath(pathname, adminPath) {
   return pathname === `${adminPath}/api` || pathname.startsWith(`${adminPath}/api/`);
 }
 
+function isPublicListPath(pathname) {
+  return pathname === '/' || pathname === '/public/api/pages' || /^\/type\/[^/]+\/?$/.test(pathname);
+}
+
 function publicApiSuffix(pathname, adminPath) {
   const suffix = pathname.startsWith(`${adminPath}/api`) ? pathname.slice(adminPath.length) : pathname;
   return suffix === '/api/health' || suffix === '/api/session' || suffix === '/api/login';
@@ -152,8 +156,9 @@ function requestAccessState(app, request) {
   const usingDefaultAdminPath = adminPath === defaultAdminPath;
   const isPublicPageView = pathname.startsWith('/pages/') && url.searchParams.get('edit') !== '1';
   const isPublicShortPageView = /^\/[a-z0-9]{6}$/.test(pathname) && url.searchParams.get('edit') !== '1';
-  if (pathname === '/favicon.ico' || pathname.startsWith('/assets/') || pathname.startsWith('/page-assets/')) return 'public';
-  if (pathname === '/' || pathname === '/admin' || pathname === '/admin/') return usingDefaultAdminPath ? 'public' : 'not-found';
+  if (pathname === '/healthz' || pathname === '/favicon.ico' || pathname.startsWith('/assets/') || pathname.startsWith('/page-assets/')) return 'public';
+  if (isPublicListPath(pathname)) return 'public';
+  if (pathname === '/admin' || pathname === '/admin/') return usingDefaultAdminPath ? 'public' : 'not-found';
   if (isActiveAdminPath(pathname, adminPath)) return 'public';
   if (isLegacyApiPath(pathname)) {
     if (!usingDefaultAdminPath) return 'not-found';
@@ -200,6 +205,16 @@ function currentSession(app, request) {
 
 async function sendAdmin(app, reply) {
   return reply.type('text/html').send(await fs.readFile(path.join(app.config.publicDir, 'index.html'), 'utf8'));
+}
+
+async function sendPublicIndex(app, reply) {
+  if (!app.store.getSettings().publicHomepageEnabled) return sendNotFound(reply, 'Public homepage disabled');
+  return reply.type('text/html').send(await fs.readFile(path.join(app.config.publicDir, 'index-public.html'), 'utf8'));
+}
+
+function normalizedPublicType(value) {
+  const type = String(value || 'all').trim().toLowerCase();
+  return ['html', 'pdf', 'word'].includes(type) ? type : 'all';
 }
 
 function registerApiRoutes(app, prefix = '') {
@@ -418,7 +433,26 @@ export function registerRoutes(app) {
     request.auth = session;
   });
 
-  app.get('/', async (request, reply) => reply.redirect(defaultAdminPath));
+  app.get('/', async (request, reply) => sendPublicIndex(app, reply));
+  app.get('/healthz', async () => ({
+    ok: true,
+    name: 'tokdoc',
+    time: new Date().toISOString(),
+  }));
+  app.get('/type/:fileType', async (request, reply) => {
+    if (!['html', 'pdf', 'word'].includes(String(request.params.fileType || '').toLowerCase())) {
+      return sendNotFound(reply, 'Type not found');
+    }
+    return sendPublicIndex(app, reply);
+  });
+  app.get('/public/api/pages', async (request, reply) => {
+    if (!app.store.getSettings().publicHomepageEnabled) return sendNotFound(reply, 'Public homepage disabled');
+    const result = app.store.listPublicPagesPage({
+      ...request.query,
+      type: normalizedPublicType(request.query?.type),
+    });
+    return result;
+  });
   app.get('/admin', async (request, reply) => sendAdmin(app, reply));
   app.get('/admin/', async (request, reply) => sendAdmin(app, reply));
   app.get('/favicon.ico', async (request, reply) => reply.code(204).send());

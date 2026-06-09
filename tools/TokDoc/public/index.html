@@ -1666,6 +1666,14 @@
           <div class="topbar-actions">
             <span class="status-pill"><span class="status-dot"></span>本地服务在线</span>
             <span class="auth-chip" id="authUserLabel">未登录</span>
+            <a class="btn" id="openPublicHome" href="/" target="_blank" rel="noreferrer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 3h6v6"></path>
+                <path d="M10 14 21 3"></path>
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              </svg>
+              前台首页
+            </a>
             <button class="btn" id="logoutButton" type="button">退出</button>
             <button class="btn" id="openSettings" type="button">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1868,6 +1876,10 @@
             <div>
               <h3 class="section-title">安全管理</h3>
               <p class="section-note">自定义后台入口，减少固定管理地址暴露。</p>
+            </div>
+            <div class="toggle-row">
+              <div><strong>公开首页</strong><span>开启后访问 / 会展示全部已发布文档列表</span></div>
+              <label class="switch"><input id="publicHomepageEnabledInput" type="checkbox" /><span></span></label>
             </div>
             <div class="field">
               <label for="adminPathInput">后台访问目录</label>

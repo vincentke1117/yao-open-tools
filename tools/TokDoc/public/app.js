@@ -23,6 +23,7 @@ const defaultSettings = {
   trackingCode: '',
   authUsername: 'admin',
   adminPath: '/admin',
+  publicHomepageEnabled: true,
   remoteSyncEnabled: false,
   remoteSyncUrl: '',
   remoteSyncHasToken: false,
@@ -62,6 +63,7 @@ const els = {
   authUsernameInput: document.querySelector('#authUsernameInput'),
   authPasswordInput: document.querySelector('#authPasswordInput'),
   adminPathInput: document.querySelector('#adminPathInput'),
+  publicHomepageEnabledInput: document.querySelector('#publicHomepageEnabledInput'),
   currentPasswordInput: document.querySelector('#currentPasswordInput'),
   authUserLabel: document.querySelector('#authUserLabel'),
   logoutButton: document.querySelector('#logoutButton'),
@@ -244,6 +246,9 @@ function renderSettings() {
   }
   if (els.adminPathInput && document.activeElement !== els.adminPathInput) {
     els.adminPathInput.value = settings.adminPath || '/admin';
+  }
+  if (els.publicHomepageEnabledInput) {
+    els.publicHomepageEnabledInput.checked = settings.publicHomepageEnabled !== false;
   }
   if (els.currentPasswordInput && document.activeElement !== els.currentPasswordInput) {
     els.currentPasswordInput.value = '';
@@ -467,11 +472,22 @@ async function saveSettings() {
   const authUsername = els.authUsernameInput?.value.trim() || 'admin';
   const authPassword = els.authPasswordInput?.value || '';
   const adminPath = normalizeAdminPath(els.adminPathInput?.value || '/admin');
+  const publicHomepageEnabled = els.publicHomepageEnabledInput ? els.publicHomepageEnabledInput.checked : true;
   const currentPassword = els.currentPasswordInput?.value || '';
   const settingsResult = await api('/api/settings', {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ trackingCode, authUsername, authPassword, adminPath, currentPassword, remoteSyncEnabled, remoteSyncUrl, remoteSyncToken }),
+    body: JSON.stringify({
+      trackingCode,
+      authUsername,
+      authPassword,
+      adminPath,
+      publicHomepageEnabled,
+      currentPassword,
+      remoteSyncEnabled,
+      remoteSyncUrl,
+      remoteSyncToken,
+    }),
   });
   applySettings(settingsResult.settings || settings);
   session = { authenticated: true, username: settings.authUsername || authUsername };

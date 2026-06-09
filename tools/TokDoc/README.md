@@ -12,25 +12,36 @@ npm run dev
 打开：
 
 ```text
+http://127.0.0.1:8080/
 http://127.0.0.1:8080/admin
 ```
 
 ## Docker 启动
 
+首次部署建议先复制配置：
+
 ```bash
-docker compose up --build
+cp .env.example .env
+```
+
+线上部署时建议先修改 `.env` 里的 `TOKDOC_INITIAL_PASSWORD`。
+
+```bash
+docker compose up -d --build
 ```
 
 Docker 默认访问地址：
 
 ```text
+http://127.0.0.1:18082/
 http://127.0.0.1:18082/admin
+http://127.0.0.1:18082/healthz
 ```
 
 如果要改宿主机端口：
 
 ```bash
-TOKDOC_HOST_PORT=8088 docker compose up --build
+TOKDOC_HOST_PORT=8088 docker compose up -d --build
 ```
 
 默认挂载：
@@ -38,7 +49,15 @@ TOKDOC_HOST_PORT=8088 docker compose up --build
 - `./data:/app/data`：SQLite、上传文件、生成页面和版本快照。
 - `./html-inbox:/watch/html-inbox`：容器内默认监听目录。
 
+线上域名部署建议保持 `.env` 里的 `TOKDOC_BIND_ADDR=127.0.0.1`，再用 Nginx 或宝塔反向代理到 `http://127.0.0.1:18082`。如果要局域网直接访问容器端口，可以改成 `TOKDOC_BIND_ADDR=0.0.0.0`。
+
 Docker 镜像内置 LibreOffice Writer 和 Noto CJK 字体，用于把 `.doc/.docx` 转成 PDF。若本机 Node 直接启动并需要 Word 转 PDF，需要额外安装 LibreOffice，或通过 `TOKDOC_SOFFICE_BIN` 指定 `soffice` 路径。旧部署中的 `TOKHTML_*` 环境变量仍会被读取作为兼容 fallback。
+
+完整服务器和宝塔部署说明见：
+
+```text
+docs/deploy-docker.md
+```
 
 ## 登录
 
@@ -51,9 +70,13 @@ Docker 镜像内置 LibreOffice Writer 和 Noto CJK 字体，用于把 `.doc/.do
 
 新安装默认密码是 `tokdoc`。如果旧数据库已经保存过账号密码，系统会继续使用数据库里的旧设置，不会覆盖已有登录信息。
 
+Docker 首次初始化空数据库时，可以通过 `.env` 里的 `TOKDOC_INITIAL_USERNAME` 和 `TOKDOC_INITIAL_PASSWORD` 修改初始登录信息。它们只在没有任何账号设置时生效，不会覆盖已有数据库。
+
 登录成功后会写入长期会话 Cookie，默认保持登录状态。可以在“设置”里修改登录用户名和密码；密码留空保存时不会覆盖当前密码。
 
 后台管理入口默认是 `/admin`，可在“设置”的“安全管理”里改成自定义单层目录，例如 `/tok-ops`。修改后台访问目录时需要输入当前密码；修改后旧 `/admin` 和固定 `/api/*` 管理接口会返回 404，只能通过新的 `/<后台目录>` 和 `/<后台目录>/api/*` 管理。普通生成页面 `/<slug>` 不需要登录即可访问；在线编辑模式 `/<slug>?edit=1` 仍需要后台登录态。旧格式 `/pages/<slug>.html` 会继续兼容访问。
+
+访问 `/` 会打开公开文档索引页，不需要登录，默认展示全部已发布文档，并支持 `/type/html`、`/type/pdf`、`/type/word` 类型页、搜索、排序和分页。可以在“设置”的“安全管理”里关闭“公开首页”；关闭后 `/` 和 `/public/api/pages` 会返回 404，但单个文档短链接 `/<slug>` 仍可公开访问。
 
 如果忘记了自定义后台目录，可以临时用环境变量覆盖恢复：
 
@@ -121,6 +144,11 @@ data/pages/20260608-contract-a1b2c3.pdf
 - `POST /admin/api/watch-dirs`
 - `DELETE /admin/api/watch-dirs/:id`
 - `POST /admin/api/watch-dirs/:id/rescan`
+- `GET /public/api/pages`：公开列表 API，只返回公开字段
+- `GET /`
+- `GET /type/html`
+- `GET /type/pdf`
+- `GET /type/word`
 - `GET /:slug`
 - `GET /:slug?edit=1`
 - `GET /pages/:slug.html`：旧链接兼容

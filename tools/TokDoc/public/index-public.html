@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TokDoc 文档索引</title>
+    <style>
+      :root {
+        --bg: #f5f4ed;
+        --panel: #faf9f5;
+        --panel-2: #f2f0e7;
+        --ink: #141413;
+        --ink-soft: #3d3d3a;
+        --muted: #5e5d59;
+        --muted-2: #87867f;
+        --line: #e8e5da;
+        --line-strong: #d1cfc5;
+        --accent: #1b365d;
+        --accent-hover: #142844;
+        --blue-soft: #eef2f7;
+        --green: #365f45;
+        --green-soft: #edf3ea;
+        --amber: #805a23;
+        --amber-soft: #f4ead8;
+        --violet: #513f76;
+        --violet-soft: #eeeaf5;
+        --radius: 8px;
+        --sans: -apple-system, BlinkMacSystemFont, "Source Han Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+        --serif: "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", Georgia, serif;
+        --mono: "JetBrains Mono", "SF Mono", Consolas, Monaco, monospace;
+        color-scheme: light;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: var(--bg);
+      }
+
+      body {
+        min-width: 320px;
+        min-height: 100vh;
+        margin: 0;
+        color: var(--ink);
+        background:
+          linear-gradient(180deg, #faf9f5 0, #f5f4ed 320px),
+          var(--bg);
+        font-family: var(--sans);
+        font-size: 14px;
+        letter-spacing: 0;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      button {
+        border: 0;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .shell {
+        width: min(1180px, calc(100vw - 48px));
+        margin: 0 auto;
+        padding: 28px 0 48px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        min-height: 56px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        gap: 12px;
+      }
+
+      .brand-mark {
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+        width: 34px;
+        height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--accent);
+        background: #f5f4ed;
+        box-shadow: inset 0 1px 0 #fff;
+      }
+
+      .brand-title {
+        display: block;
+        color: var(--ink);
+        font-family: var(--serif);
+        font-size: 20px;
+        font-weight: 500;
+        line-height: 1.18;
+      }
+
+      .brand-subtitle {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 28px;
+        padding: 0 11px;
+        border-radius: 999px;
+        color: var(--accent);
+        background: var(--blue-soft);
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .status-pill::before {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+        content: "";
+      }
+
+      .index-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+        gap: 18px;
+        align-items: end;
+        margin-top: 34px;
+        padding: 24px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        box-shadow: inset 0 1px 0 #fff;
+      }
+
+      .section-title {
+        margin: 0;
+        padding-left: 10px;
+        border-left: 3px solid var(--accent);
+        border-radius: 2px;
+        color: var(--ink);
+        font-family: var(--serif);
+        font-size: 28px;
+        font-weight: 500;
+        line-height: 1.18;
+      }
+
+      .section-note {
+        margin: 9px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .stats-line {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .stats-line strong {
+        color: var(--accent);
+        font-family: var(--serif);
+        font-size: 20px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .search-wrap {
+        position: relative;
+        min-width: 0;
+      }
+
+      .search-wrap svg {
+        position: absolute;
+        top: 50%;
+        left: 12px;
+        transform: translateY(-50%);
+        color: var(--muted-2);
+      }
+
+      .search-wrap input {
+        width: 100%;
+        min-width: 0;
+        height: 42px;
+        padding: 0 14px 0 40px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        outline: none;
+        color: var(--ink);
+        background: #fffefa;
+      }
+
+      .search-wrap input:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px #d6e1ee;
+      }
+
+      .list-panel {
+        margin-top: 20px;
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        box-shadow: inset 0 1px 0 #fff;
+      }
+
+      .filter-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        min-height: 68px;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--line);
+        background: #f8f7f1;
+      }
+
+      .segmented {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 5px;
+        border-radius: 8px;
+        background: #e8e6dc;
+      }
+
+      .segmented a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 0 13px;
+        border-radius: 7px;
+        color: var(--muted);
+        font-weight: 500;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+
+      .segmented a.is-active {
+        color: var(--ink);
+        background: #fffefa;
+        box-shadow: inset 0 1px 0 #fff;
+      }
+
+      .sort-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 13px;
+        white-space: nowrap;
+      }
+
+      .sort-wrap select {
+        height: 34px;
+        padding: 0 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--ink-soft);
+        background: #fffefa;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        min-width: 860px;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 13px 18px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: middle;
+      }
+
+      th {
+        color: var(--muted);
+        background: #f2f0e7;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      tbody tr {
+        cursor: pointer;
+        transition:
+          background 150ms ease,
+          color 150ms ease;
+      }
+
+      tbody tr:hover {
+        background: #fffefa;
+      }
+
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .type-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 48px;
+        min-height: 26px;
+        padding: 0 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .type-html {
+        color: var(--green);
+        background: var(--green-soft);
+      }
+
+      .type-pdf {
+        color: var(--amber);
+        background: var(--amber-soft);
+      }
+
+      .type-word {
+        color: var(--violet);
+        background: var(--violet-soft);
+      }
+
+      .title-cell {
+        min-width: 280px;
+      }
+
+      .title-main {
+        display: block;
+        overflow: hidden;
+        max-width: 420px;
+        color: var(--ink);
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .title-meta,
+      .muted-cell {
+        display: block;
+        margin-top: 4px;
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 12px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .mono {
+        font-family: var(--mono);
+      }
+
+      .open-btn,
+      .page-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-height: 34px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--ink-soft);
+        background: #fffefa;
+        cursor: pointer;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+
+      .open-btn:hover,
+      .page-btn:hover {
+        border-color: var(--line-strong);
+        background: #e8e6dc;
+      }
+
+      .open-btn {
+        color: var(--accent);
+      }
+
+      .cards {
+        display: none;
+      }
+
+      .doc-card {
+        display: grid;
+        gap: 10px;
+        padding: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .doc-card:last-child {
+        border-bottom: 0;
+      }
+
+      .card-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .card-title {
+        min-width: 0;
+      }
+
+      .card-title strong {
+        display: block;
+        overflow: hidden;
+        color: var(--ink);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .card-meta {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .empty-state {
+        display: none;
+        padding: 48px 24px;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      .empty-state strong {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--ink);
+        font-family: var(--serif);
+        font-size: 20px;
+        font-weight: 500;
+      }
+
+      .pagination {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 64px;
+        padding: 14px 20px;
+        border-top: 1px solid var(--line);
+      }
+
+      .page-summary {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .page-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .page-btn[disabled] {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
+        white-space: nowrap;
+      }
+
+      @media (max-width: 760px) {
+        .shell {
+          width: min(100% - 28px, 1180px);
+          padding-top: 18px;
+        }
+
+        .topbar {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .status-pill {
+          align-self: flex-start;
+        }
+
+        .index-head {
+          grid-template-columns: 1fr;
+          margin-top: 20px;
+          padding: 18px;
+          min-width: 0;
+        }
+
+        .index-head > *,
+        .filter-bar > * {
+          min-width: 0;
+        }
+
+        .section-title {
+          font-size: 24px;
+        }
+
+        .section-note {
+          overflow-wrap: anywhere;
+        }
+
+        .filter-bar {
+          display: grid;
+          grid-template-columns: 1fr;
+          align-items: stretch;
+        }
+
+        .segmented {
+          display: flex;
+          width: 100%;
+          min-width: 0;
+          max-width: 100%;
+          overflow-x: auto;
+          justify-content: flex-start;
+        }
+
+        .segmented a {
+          flex: 0 0 auto;
+        }
+
+        .sort-wrap {
+          justify-content: space-between;
+          width: 100%;
+          min-width: 0;
+        }
+
+        .sort-wrap select {
+          max-width: 180px;
+        }
+
+        .table-wrap {
+          display: none;
+        }
+
+        .cards {
+          display: block;
+        }
+
+        .doc-card,
+        .card-head,
+        .card-title {
+          min-width: 0;
+        }
+
+        .open-btn {
+          width: 100%;
+        }
+
+        .pagination {
+          display: grid;
+          grid-template-columns: 1fr;
+          align-items: stretch;
+        }
+
+        .page-actions {
+          justify-content: space-between;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar" aria-label="TokDoc">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path>
+              <path d="M14 2v4a2 2 0 0 0 2 2h4"></path>
+              <path d="m10 13-2 2 2 2"></path>
+              <path d="m14 17 2-2-2-2"></path>
+            </svg>
+          </div>
+          <div>
+            <span class="brand-title">TokDoc</span>
+            <span class="brand-subtitle">公开文档索引 · HTML / PDF / Word</span>
+          </div>
+        </div>
+        <span class="status-pill">公开阅读</span>
+      </header>
+
+      <section class="index-head" aria-label="文档索引">
+        <div>
+          <h1 class="section-title">文档索引</h1>
+          <p class="section-note">这里汇总管理员上传并发布的文档。可以按类型筛选，也可以直接搜索标题、文件名、目录或短链接。</p>
+          <div class="stats-line" id="statsLine" aria-live="polite">
+            <span>全部 <strong>0</strong></span>
+            <span>HTML <strong>0</strong></span>
+            <span>PDF <strong>0</strong></span>
+            <span>Word <strong>0</strong></span>
+          </div>
+        </div>
+        <label class="search-wrap">
+          <span class="sr-only">搜索文档</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+          </svg>
+          <input id="searchInput" type="search" placeholder="搜索标题、文件名、目录或短链接" autocomplete="off" />
+        </label>
+      </section>
+
+      <section class="list-panel" aria-label="公开文档列表">
+        <div class="filter-bar">
+          <nav class="segmented" id="typeTabs" aria-label="文档类型筛选">
+            <a href="/" data-type="all">全部</a>
+            <a href="/type/html" data-type="html">HTML</a>
+            <a href="/type/pdf" data-type="pdf">PDF</a>
+            <a href="/type/word" data-type="word">Word</a>
+          </nav>
+          <label class="sort-wrap">
+            排序
+            <select id="sortSelect">
+              <option value="updated_desc">最近更新</option>
+              <option value="created_desc">最近上传</option>
+              <option value="access_desc">访问最多</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="table-wrap" aria-label="桌面列表">
+          <table>
+            <thead>
+              <tr>
+                <th>类型</th>
+                <th>标题</th>
+                <th>目录</th>
+                <th>上传时间</th>
+                <th>大小</th>
+                <th>访问次数</th>
+                <th>打开</th>
+              </tr>
+            </thead>
+            <tbody id="docRows"></tbody>
+          </table>
+        </div>
+
+        <div class="cards" id="docCards" aria-label="移动端列表"></div>
+
+        <div class="empty-state" id="emptyState">
+          <strong>暂无公开文档</strong>
+          <span>请先在后台上传文档。</span>
+        </div>
+
+        <div class="pagination" id="pagination"></div>
+      </section>
+    </main>
+    <script src="/assets/public-app.js"></script>
+  </body>
+</html>
