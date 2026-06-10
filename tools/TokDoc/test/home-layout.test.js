@@ -59,6 +59,11 @@ test('exposes PDF and Word document upload affordances in the manager UI', async
   assert.match(html, /上传 HTML、PDF 或 Word/);
   assert.match(html, /选择文件/);
   assert.match(html, /accept="\.html,\.htm,\.pdf,\.doc,\.docx,text\/html,application\/pdf"/);
+  assert.match(html, /id="uploadBackdrop"/);
+  assert.match(html, /id="uploadProgressBar"/);
+  assert.match(html, /id="uploadReviewRows"/);
+  assert.match(html, /id="confirmUpload"/);
+  assert.match(html, /上传完成后确认名称，确认后写入列表和数据库/);
   assert.match(html, /文档列表/);
   assert.match(html, /<th>类型<\/th>/);
   assert.match(html, /id="metaFileType"/);
@@ -87,4 +92,14 @@ test('opens public documents in a new tab and defaults public pagination to 10',
   assert.match(script, /target="_blank"/);
   assert.match(script, /rel="noopener noreferrer"/);
   assert.match(script, /window\.open\(row\.dataset\.url, '_blank', 'noopener,noreferrer'\)/);
+});
+
+test('stages uploads with progress before confirming them into the page list', async () => {
+  const script = await fs.readFile(path.resolve('public/app.js'), 'utf8');
+
+  assert.match(script, /XMLHttpRequest/);
+  assert.match(script, /\/api\/pages\/upload\/prepare/);
+  assert.match(script, /\/api\/pages\/upload\/.*confirm/);
+  assert.match(script, /uploadReviewDocuments/);
+  assert.match(script, /确认入库/);
 });

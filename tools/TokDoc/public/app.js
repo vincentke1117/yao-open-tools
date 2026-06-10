@@ -42,6 +42,9 @@ let session = { authenticated: false, username: '' };
 let activeFilter = 'all';
 let currentPageId = null;
 let toastTimer = null;
+let stagedUpload = null;
+let activeUploadRequest = null;
+let uploadCancelRequested = false;
 let pagination = {
   page: 1,
   pageSize: 20,
@@ -60,6 +63,19 @@ const els = {
   fileInput: document.querySelector('#fileInput'),
   directoryInput: document.querySelector('#directoryInput'),
   dropZone: document.querySelector('#dropZone'),
+  uploadBackdrop: document.querySelector('#uploadBackdrop'),
+  uploadProgressCard: document.querySelector('#uploadProgressCard'),
+  uploadProgressText: document.querySelector('#uploadProgressText'),
+  uploadProgressDetail: document.querySelector('#uploadProgressDetail'),
+  uploadProgressBadge: document.querySelector('#uploadProgressBadge'),
+  uploadProgressBar: document.querySelector('#uploadProgressBar'),
+  uploadReview: document.querySelector('#uploadReview'),
+  uploadReviewRows: document.querySelector('#uploadReviewRows'),
+  uploadReviewSummary: document.querySelector('#uploadReviewSummary'),
+  uploadReviewCount: document.querySelector('#uploadReviewCount'),
+  uploadFooterNote: document.querySelector('#uploadFooterNote'),
+  confirmUpload: document.querySelector('#confirmUpload'),
+  cancelUpload: document.querySelector('#cancelUpload'),
   previewBackdrop: document.querySelector('#previewBackdrop'),
   previewFrame: document.querySelector('#previewFrame'),
   trackingCodeInput: document.querySelector('#trackingCodeInput'),
@@ -210,6 +226,14 @@ function fileTypeBadgeClass(page) {
   if (type === 'pdf') return 'badge-warning';
   if (type === 'word') return 'badge-violet';
   return 'badge-success';
+}
+
+function fileTypeLabelFromType(type) {
+  return fileTypeLabel({ fileType: type || 'html' });
+}
+
+function fileTypeBadgeClassFromType(type) {
+  return fileTypeBadgeClass({ fileType: type || 'html' });
 }
 
 function pageUrl(page) {
@@ -430,6 +454,139 @@ function renderPagination() {
     </div>`;
 }
 
+function setUploadProgress({ text, detail, badge, percent, indeterminate = false }) {
+  els.uploadProgressText.textContent = text;
+  els.uploadProgressDetail.textContent = detail;
+  els.uploadProgressBadge.textContent = badge;
+  els.uploadProgressCard.classList.toggle('is-indeterminate', indeterminate);
+  if (!indeterminate) els.uploadProgressBar.style.width = `${Math.min(Math.max(percent, 0), 100)}%`;
+}
+
+function setUploadActions({ confirmDisabled = true, cancelDisabled = false, confirmText = '确认入库' } = {}) {
+  els.confirmUpload.disabled = confirmDisabled;
+  els.confirmUpload.textContent = confirmText;
+  els.cancelUpload.disabled = cancelDisabled;
+}
+
+function resetUploadDialog() {
+  stagedUpload = null;
+  els.uploadReview.hidden = true;
+  els.uploadReviewRows.innerHTML = '';
+  els.uploadFooterNote.textContent = '暂存文件不会出现在前台和列表里。';
+  setUploadProgress({
+    text: '等待上传',
+    detail: '选择文件后开始上传和解析',
+    badge: '准备',
+    percent: 0,
+  });
+  setUploadActions();
+}
+
+function uploadSummary(upload) {
+  const documents = upload.documents || [];
+  const htmlCount = documents.filter((item) => item.fileType === 'html').length;
+  const pdfCount = documents.filter((item) => item.fileType === 'pdf').length;
+  const wordCount = documents.filter((item) => item.fileType === 'word').length;
+  return [
+    htmlCount ? `${htmlCount} 个 HTML` : '',
+    pdfCount ? `${pdfCount} 个 PDF` : '',
+    wordCount ? `${wordCount} 个 Word` : '',
+    upload.assetCount ? `${upload.assetCount} 个附件` : '',
+  ]
+    .filter(Boolean)
+    .join('，');
+}
+
+function renderUploadReview(upload) {
+  const documents = upload.documents || [];
+  els.uploadReview.hidden = false;
+  els.uploadReviewCount.textContent = `${documents.length} 个文档`;
+  els.uploadReviewSummary.textContent = upload.assetCount
+    ? `另有 ${upload.assetCount} 个附件会随目录同步，确认后生成正式 URL`
+    : '确认后生成正式 URL，并写入文档列表和数据库';
+  els.uploadReviewRows.innerHTML = documents
+    .map(
+      (item) => `<div class="upload-review-row" data-upload-doc-id="${escapeHtml(item.id)}">
+        <div class="upload-review-type">
+          <span class="badge ${fileTypeBadgeClassFromType(item.fileType)}">${fileTypeLabelFromType(item.fileType)}</span>
+          <span title="${escapeHtml(item.relativePath || item.fileName)}">${escapeHtml(item.directoryName || '无目录')}</span>
+        </div>
+        <label class="field">
+          <span>页面标题</span>
+          <input data-upload-field="title" value="${escapeHtml(item.title || '')}" placeholder="展示在列表和前台的标题" />
+        </label>
+        <label class="field">
+          <span>文件名称</span>
+          <input data-upload-field="fileName" value="${escapeHtml(item.fileName || '')}" placeholder="生成文件名和列表副标题" />
+        </label>
+      </div>`,
+    )
+    .join('');
+  els.uploadFooterNote.textContent = '确认后才会写入数据库；取消会清理本次暂存文件。';
+  setUploadActions({ confirmDisabled: false });
+}
+
+function uploadReviewDocuments() {
+  return Array.from(els.uploadReviewRows.querySelectorAll('[data-upload-doc-id]')).map((row) => ({
+    id: row.dataset.uploadDocId,
+    title: row.querySelector('[data-upload-field="title"]').value.trim(),
+    fileName: row.querySelector('[data-upload-field="fileName"]').value.trim(),
+  }));
+}
+
+function uploadWithProgress(form) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    activeUploadRequest = xhr;
+    xhr.open('POST', apiUrl('/api/pages/upload/prepare'));
+    xhr.withCredentials = true;
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable) {
+        const percent = Math.min(92, Math.max(8, Math.round((event.loaded / event.total) * 92)));
+        setUploadProgress({
+          text: '正在上传文件',
+          detail: `${formatSize(event.loaded)} / ${formatSize(event.total)}`,
+          badge: `${percent}%`,
+          percent,
+        });
+      } else {
+        setUploadProgress({
+          text: '正在上传文件',
+          detail: '浏览器未返回总大小，保持上传中状态',
+          badge: '上传中',
+          percent: 0,
+          indeterminate: true,
+        });
+      }
+    });
+    xhr.addEventListener('load', () => {
+      activeUploadRequest = null;
+      let data = null;
+      try {
+        data = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+      } catch {
+        data = xhr.responseText;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data || {});
+        return;
+      }
+      const message = typeof data === 'object' ? data.error : data;
+      if (xhr.status === 401) showLogin();
+      reject(new Error(message || `上传失败：${xhr.status}`));
+    });
+    xhr.addEventListener('error', () => {
+      activeUploadRequest = null;
+      reject(new Error('上传连接失败'));
+    });
+    xhr.addEventListener('abort', () => {
+      activeUploadRequest = null;
+      reject(new Error('上传已取消'));
+    });
+    xhr.send(form);
+  });
+}
+
 async function uploadFiles(files) {
   const fileList = Array.from(files || []);
   const hasDirectoryContext = fileList.some((file) => file.webkitRelativePath);
@@ -443,21 +600,85 @@ async function uploadFiles(files) {
     showToast('没有检测到 HTML、PDF 或 Word 文件');
     return;
   }
+  uploadCancelRequested = false;
+  resetUploadDialog();
+  openLayer(els.uploadBackdrop);
+  setUploadProgress({
+    text: '正在准备上传',
+    detail: `共 ${supportedFiles.length} 个可管理文档，${Math.max(0, uploadableFiles.length - supportedFiles.length)} 个附件`,
+    badge: '准备',
+    percent: 6,
+  });
   const form = new FormData();
   uploadableFiles.forEach((file) => {
     form.append('relativePath', file.webkitRelativePath || file.name);
     form.append('files', file, file.name);
   });
-  const result = await api('/api/pages/upload', { method: 'POST', body: form });
-  pages = [...(result.pages || []), ...pages];
-  await resetToFirstPage();
-  const assetCount = Math.max(0, uploadableFiles.length - supportedFiles.length);
-  const typeParts = [
-    htmlCount ? `${htmlCount} 个 HTML` : '',
-    pdfCount ? `${pdfCount} 个 PDF` : '',
-    wordCount ? `${wordCount} 个 Word` : '',
-  ].filter(Boolean);
-  showToast(assetCount ? `已导入 ${result.pages.length} 个文档，并同步 ${assetCount} 个附件` : `已导入 ${result.pages.length} 个文档：${typeParts.join('、')}`);
+  try {
+    const result = await uploadWithProgress(form);
+    stagedUpload = result;
+    setUploadProgress({
+      text: '上传解析完成',
+      detail: uploadSummary(result) || `${htmlCount + pdfCount + wordCount} 个文档待确认`,
+      badge: '待确认',
+      percent: 100,
+    });
+    renderUploadReview(result);
+    showToast('请确认文档名称后入库');
+  } catch (error) {
+    if (uploadCancelRequested) return;
+    setUploadProgress({
+      text: '上传失败',
+      detail: error.message || '请重新选择文件上传',
+      badge: '失败',
+      percent: 100,
+    });
+    setUploadActions({ confirmDisabled: true });
+    showToast(error.message);
+  }
+}
+
+async function cancelUploadDialog() {
+  uploadCancelRequested = true;
+  if (activeUploadRequest) activeUploadRequest.abort();
+  if (stagedUpload?.uploadId) {
+    await api(`/api/pages/upload/${encodeURIComponent(stagedUpload.uploadId)}`, { method: 'DELETE' }).catch(() => {});
+  }
+  resetUploadDialog();
+  closeLayer(els.uploadBackdrop);
+}
+
+async function confirmUploadDialog() {
+  if (!stagedUpload?.uploadId) return;
+  setUploadActions({ confirmDisabled: true, cancelDisabled: true, confirmText: '生成中' });
+  setUploadProgress({
+    text: '正在生成 URL',
+    detail: '写入 pages 目录和数据库，Word 文档会同步转换为 PDF',
+    badge: '生成中',
+    percent: 0,
+    indeterminate: true,
+  });
+  try {
+    const result = await api(`/api/pages/upload/${encodeURIComponent(stagedUpload.uploadId)}/confirm`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ documents: uploadReviewDocuments() }),
+    });
+    stagedUpload = null;
+    await resetToFirstPage();
+    closeLayer(els.uploadBackdrop);
+    resetUploadDialog();
+    showToast(`已入库 ${result.pages?.length || 0} 个文档`);
+  } catch (error) {
+    setUploadProgress({
+      text: '入库失败',
+      detail: error.message || '请检查文件后重试',
+      badge: '失败',
+      percent: 100,
+    });
+    setUploadActions({ confirmDisabled: false });
+    showToast(error.message);
+  }
 }
 
 async function addSamples() {
@@ -687,7 +908,10 @@ document.querySelector('#addWatchDirectory')?.addEventListener('click', () => {
 document.querySelector('#addSample').addEventListener('click', () => addSamples().catch((error) => showToast(error.message)));
 document.querySelector('#refreshList').addEventListener('click', () => loadData().then(() => showToast('列表已刷新')));
 
-els.fileInput.addEventListener('change', (event) => uploadFiles(event.target.files).catch((error) => showToast(error.message)));
+els.fileInput.addEventListener('change', (event) => {
+  uploadFiles(event.target.files).catch((error) => showToast(error.message));
+  event.target.value = '';
+});
 els.directoryInput.addEventListener('change', (event) => {
   uploadFiles(event.target.files).catch((error) => showToast(error.message));
   event.target.value = '';
@@ -765,18 +989,29 @@ els.saveSettingsTop?.addEventListener('click', () => saveSettings().catch((error
 els.loginForm.addEventListener('submit', (event) => login(event));
 els.logoutButton.addEventListener('click', () => logout().catch((error) => showToast(error.message)));
 
+document.querySelector('#closeUpload').addEventListener('click', () => cancelUploadDialog().catch((error) => showToast(error.message)));
+els.cancelUpload.addEventListener('click', () => cancelUploadDialog().catch((error) => showToast(error.message)));
+els.confirmUpload.addEventListener('click', () => confirmUploadDialog().catch((error) => showToast(error.message)));
 document.querySelector('#closePreview').addEventListener('click', () => closeLayer(els.previewBackdrop));
 document.querySelector('#editFromPreview').addEventListener('click', () => openEditor(currentPageId));
 document.querySelector('#copyFromPreview').addEventListener('click', () => copyUrl(currentPageId));
 
-[els.previewBackdrop].forEach((layer) => {
+[els.uploadBackdrop, els.previewBackdrop].forEach((layer) => {
   layer.addEventListener('click', (event) => {
+    if (layer === els.uploadBackdrop && event.target === layer) {
+      cancelUploadDialog().catch((error) => showToast(error.message));
+      return;
+    }
     if (event.target === layer) closeLayer(layer);
   });
 });
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
+  if (els.uploadBackdrop.classList.contains('is-open')) {
+    cancelUploadDialog().catch((error) => showToast(error.message));
+    return;
+  }
   [els.previewBackdrop].forEach(closeLayer);
 });
 

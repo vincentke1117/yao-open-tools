@@ -17,6 +17,26 @@ function publicPage(page) {
   };
 }
 
+async function collectUploadParts(request) {
+  const files = [];
+  const relativePaths = [];
+  for await (const part of request.parts()) {
+    if (part.type === 'field' && part.fieldname === 'relativePath') {
+      relativePaths.push(String(part.value || ''));
+      continue;
+    }
+    if (part.type !== 'file') continue;
+    const buffer = await part.toBuffer();
+    const relativePath = relativePaths.shift() || part.filename || '';
+    files.push({
+      fileName: path.basename(part.filename || relativePath || 'file'),
+      buffer,
+      relativePath,
+    });
+  }
+  return files;
+}
+
 const sessionCookieName = 'tokdoc_session';
 const legacySessionCookieName = 'tokhtml_session';
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 365 * 10;
@@ -293,22 +313,7 @@ function registerApiRoutes(app, prefix = '') {
   });
 
   app.post(`${prefix}/api/pages/upload`, async (request, reply) => {
-    const files = [];
-    const relativePaths = [];
-    for await (const part of request.parts()) {
-      if (part.type === 'field' && part.fieldname === 'relativePath') {
-        relativePaths.push(String(part.value || ''));
-        continue;
-      }
-      if (part.type !== 'file') continue;
-      const buffer = await part.toBuffer();
-      const relativePath = relativePaths.shift() || part.filename || '';
-      files.push({
-        fileName: path.basename(part.filename || relativePath || 'file'),
-        buffer,
-        relativePath,
-      });
-    }
+    const files = await collectUploadParts(request);
     let created;
     try {
       created = await app.store.importUploadFiles(files);
@@ -318,6 +323,35 @@ function registerApiRoutes(app, prefix = '') {
     }
     if (!created.length) return reply.code(400).send({ error: 'No supported files uploaded' });
     return reply.code(201).send({ pages: created.map(publicPage) });
+  });
+
+  app.post(`${prefix}/api/pages/upload/prepare`, async (request, reply) => {
+    const files = await collectUploadParts(request);
+    const staged = await app.store.stageUploadFiles(files);
+    if (!staged.documents.length) return reply.code(400).send({ error: 'No supported files uploaded' });
+    return reply.code(201).send(staged);
+  });
+
+  app.post(`${prefix}/api/pages/upload/:uploadId/confirm`, async (request, reply) => {
+    let created;
+    try {
+      created = await app.store.confirmStagedUpload(request.params.uploadId, request.body || {});
+    } catch (error) {
+      if (error.message === 'Upload batch not found') return reply.code(404).send({ error: error.message });
+      if (error.code === 'WORD_CONVERSION_FAILED') return reply.code(422).send({ error: error.message });
+      throw error;
+    }
+    if (!created.length) return reply.code(400).send({ error: 'No supported files uploaded' });
+    return reply.code(201).send({ pages: created.map(publicPage) });
+  });
+
+  app.delete(`${prefix}/api/pages/upload/:uploadId`, async (request, reply) => {
+    try {
+      await app.store.cancelStagedUpload(request.params.uploadId);
+    } catch {
+      return reply.code(404).send({ error: 'Upload batch not found' });
+    }
+    return reply.code(204).send();
   });
 
   app.get(`${prefix}/api/settings`, async () => ({

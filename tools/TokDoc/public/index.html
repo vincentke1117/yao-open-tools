@@ -514,6 +514,10 @@
         font-size: 24px;
       }
 
+      .settings-hero .section-note {
+        margin-top: 10px;
+      }
+
       .settings-hero-actions {
         display: flex;
         flex-wrap: wrap;
@@ -964,7 +968,7 @@
       }
 
       .settings-section .section-note {
-        margin-top: -4px;
+        margin-top: 10px;
       }
 
       .watch-list {
@@ -1269,6 +1273,130 @@
         margin-top: 3px;
         color: var(--muted);
         font-size: 12px;
+      }
+
+      .upload-modal {
+        top: 72px;
+        left: 50%;
+        right: auto;
+        bottom: auto;
+        width: min(820px, calc(100vw - 36px));
+        max-height: calc(100vh - 144px);
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        transform: translateX(-50%);
+      }
+
+      .upload-flow {
+        display: grid;
+        gap: 16px;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 18px;
+      }
+
+      .upload-progress-card,
+      .upload-review {
+        display: grid;
+        gap: 12px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fffefa;
+      }
+
+      .upload-progress-head,
+      .upload-review-head,
+      .upload-review-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .upload-progress-head strong,
+      .upload-review-head strong {
+        display: block;
+        color: var(--ink);
+        font-size: 14px;
+      }
+
+      .upload-progress-head span,
+      .upload-review-head span {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .upload-progress-track {
+        height: 9px;
+        overflow: hidden;
+        border-radius: 99px;
+        background: #ece8dd;
+      }
+
+      .upload-progress-bar {
+        width: 0%;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--accent);
+        transition: width 160ms ease;
+      }
+
+      .upload-progress-card.is-indeterminate .upload-progress-bar {
+        width: 42%;
+        animation: upload-progress-slide 1.1s ease-in-out infinite;
+      }
+
+      .upload-review-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .upload-review-row {
+        grid-template-columns: 84px minmax(0, 1fr) minmax(0, 1fr);
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      .upload-review-type {
+        display: grid;
+        gap: 6px;
+        align-content: start;
+      }
+
+      .upload-review-type span:last-child {
+        color: var(--muted);
+        font-size: 12px;
+        word-break: break-all;
+      }
+
+      .upload-modal-footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 18px;
+        border-top: 1px solid var(--line);
+        background: var(--panel);
+      }
+
+      .upload-modal-footer .footer-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      @keyframes upload-progress-slide {
+        0% {
+          transform: translateX(-110%);
+        }
+        50% {
+          transform: translateX(60%);
+        }
+        100% {
+          transform: translateX(250%);
+        }
       }
 
       .preview-body {
@@ -1638,6 +1766,19 @@
           padding: 14px var(--panel-pad);
         }
 
+        .upload-review-row {
+          grid-template-columns: 1fr;
+        }
+
+        .upload-modal-footer {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .upload-modal-footer .footer-actions {
+          justify-content: flex-start;
+        }
+
         .filter-panel .segmented {
           width: max-content;
           max-width: 100%;
@@ -1665,6 +1806,17 @@
         .modal {
           inset: 0;
           border-radius: 0;
+        }
+
+        .upload-modal {
+          top: 12px;
+          left: 50%;
+          right: auto;
+          bottom: auto;
+          width: calc(100vw - 24px);
+          max-height: calc(100vh - 24px);
+          border-radius: 8px;
+          transform: translateX(-50%);
         }
 
         .editor-modal {
@@ -2070,6 +2222,64 @@
           <div class="login-error" id="loginError" aria-live="polite"></div>
           <button class="btn btn-primary" type="submit">登录</button>
         </form>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="uploadBackdrop" aria-hidden="true">
+      <section class="modal upload-modal" role="dialog" aria-modal="true" aria-labelledby="uploadModalTitle">
+        <div class="modal-header">
+          <div class="modal-title">
+            <span class="file-icon" aria-hidden="true">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 3v12"></path>
+                <path d="m17 8-5-5-5 5"></path>
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              </svg>
+            </span>
+            <div>
+              <strong id="uploadModalTitle">上传并确认文档</strong>
+              <span id="uploadModalSubtitle">上传完成后确认名称，确认后写入列表和数据库</span>
+            </div>
+          </div>
+          <button class="btn icon-btn" id="closeUpload" type="button" aria-label="取消上传" title="取消">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6 6 18"></path>
+              <path d="m6 6 12 12"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="upload-flow">
+          <section class="upload-progress-card" id="uploadProgressCard" aria-live="polite">
+            <div class="upload-progress-head">
+              <div>
+                <strong id="uploadProgressText">等待上传</strong>
+                <span id="uploadProgressDetail">选择文件后开始上传和解析</span>
+              </div>
+              <span class="badge badge-success" id="uploadProgressBadge">准备</span>
+            </div>
+            <div class="upload-progress-track" aria-hidden="true">
+              <div class="upload-progress-bar" id="uploadProgressBar"></div>
+            </div>
+          </section>
+
+          <section class="upload-review" id="uploadReview" hidden>
+            <div class="upload-review-head">
+              <div>
+                <strong>确认入库信息</strong>
+                <span id="uploadReviewSummary">确认后才会生成正式 URL 并写入文档列表</span>
+              </div>
+              <span class="badge badge-violet" id="uploadReviewCount">0 个文档</span>
+            </div>
+            <div class="upload-review-list" id="uploadReviewRows"></div>
+          </section>
+        </div>
+        <div class="upload-modal-footer">
+          <span class="section-note" id="uploadFooterNote">暂存文件不会出现在前台和列表里。</span>
+          <div class="footer-actions">
+            <button class="btn" id="cancelUpload" type="button">取消</button>
+            <button class="btn btn-primary" id="confirmUpload" type="button" disabled>确认入库</button>
+          </div>
+        </div>
       </section>
     </div>
 
