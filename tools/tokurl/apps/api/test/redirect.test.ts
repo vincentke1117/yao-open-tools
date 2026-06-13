@@ -164,7 +164,7 @@ describe("redirect route analytics", () => {
       expect(response.body).toContain("即将抵达");
       expect(response.body).toContain("把漫长的网址，折成一枚轻舟");
       expect(response.body).toContain("data-target-url");
-      expect(response.body).toContain("<span class=\"target-url-label\">目标</span>");
+      expect(response.body).toContain("<span class=\"target-url-label\">目标网址</span>");
       expect(response.body).toContain("继续前往");
       expect(response.body).toContain("window.setTimeout(redirect, 300)");
       expect(response.body).toContain("window.setTimeout(redirect, 900)");

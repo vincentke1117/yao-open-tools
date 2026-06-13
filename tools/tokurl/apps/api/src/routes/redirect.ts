@@ -220,8 +220,10 @@ export function renderTrackedRedirectPage(input: { targetUrl: string; slug: stri
         align-items: center;
         gap: 8px;
         min-width: 0;
+        max-width: 100%;
         margin: 16px 0 0;
         padding: 8px 10px;
+        overflow: hidden;
         border: 1px solid #edf2f7;
         border-radius: 10px;
         background: #f8fafc;
@@ -241,6 +243,7 @@ export function renderTrackedRedirectPage(input: { targetUrl: string; slug: stri
         overflow: hidden;
         direction: ltr;
         text-overflow: ellipsis;
+        unicode-bidi: plaintext;
         white-space: nowrap;
       }
 
@@ -371,7 +374,7 @@ export function renderTrackedRedirectPage(input: { targetUrl: string; slug: stri
       <p class="kicker">TokURL</p>
       <h1>即将抵达</h1>
       <div class="target-url" title="${escapedTargetUrl}" aria-label="目标网址 ${escapedTargetUrl}">
-        <span class="target-url-label">目标</span>
+        <span class="target-url-label">目标网址</span>
         <span class="target-url-value" data-target-url>${escapedTargetUrl}</span>
       </div>
       <p class="redirect-line" data-redirect-line aria-live="polite">${escapedInitialCopy}</p>
