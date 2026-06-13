@@ -1,12 +1,250 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TokURL</title>
+    <meta
+      name="description"
+      content="TokURL 是一个开源、自部署的短链工具，支持一键生成短链接、二维码、跳转统计、链接管理、用户权限和 Docker 多容器部署。"
+    />
+    <meta
+      name="keywords"
+      content="TokURL,短链工具,短链接,URL Shortener,开源短链,自部署短链,二维码,链接统计,Docker 部署"
+    />
+    <meta name="robots" content="index,follow" />
+    <meta name="theme-color" content="#1677ff" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="TokURL" />
+    <meta property="og:title" content="TokURL - 开源自部署短链工具" />
+    <meta
+      property="og:description"
+      content="把长链接一键缩短，支持全球跳转、实时统计、二维码、二次编辑、用户管理和本地多容器部署。"
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="TokURL - 开源自部署短链工具" />
+    <meta
+      name="twitter:description"
+      content="开源短链工具，支持短链接生成、跳转统计、二维码、链接管理和 Docker 自部署。"
+    />
+    <title>TokURL - 开源自部署短链工具</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "TokURL",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Web, Docker",
+        "description": "TokURL 是一个开源、自部署的短链工具，支持一键生成短链接、二维码、跳转统计、链接管理、用户权限和 Docker 多容器部署。",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "sameAs": "https://github.com/yaojingang/yao-open-tools/tree/main/tools/tokurl"
+      }
+    </script>
+    <style>
+      .seo-shell {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 56px 24px;
+        color: #171a21;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei",
+          sans-serif;
+      }
+
+      .seo-nav,
+      .seo-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .seo-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 24px;
+        font-weight: 800;
+      }
+
+      .seo-logo {
+        display: inline-flex;
+        width: 42px;
+        height: 42px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        background: #1677ff;
+        color: #fff;
+      }
+
+      .seo-hero {
+        padding: 88px 0 64px;
+        text-align: center;
+      }
+
+      .seo-hero h1 {
+        margin: 0;
+        font-size: clamp(44px, 6vw, 72px);
+        line-height: 1.08;
+        letter-spacing: 0;
+      }
+
+      .seo-hero h1 span {
+        color: #1677ff;
+      }
+
+      .seo-hero p {
+        margin: 22px auto 0;
+        max-width: 720px;
+        color: #5d6472;
+        font-size: 20px;
+        line-height: 1.7;
+      }
+
+      .seo-card {
+        border: 1px solid #e4e8f0;
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: 0 20px 60px rgb(24 35 57 / 10%);
+        padding: 28px;
+      }
+
+      .seo-example {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: 16px;
+        align-items: center;
+        color: #5d6472;
+      }
+
+      .seo-example strong {
+        display: block;
+        margin-bottom: 8px;
+        color: #171a21;
+      }
+
+      .seo-example code {
+        color: #1677ff;
+        overflow-wrap: anywhere;
+      }
+
+      .seo-features {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+        margin: 28px 0 48px;
+      }
+
+      .seo-feature {
+        border: 1px solid #e4e8f0;
+        border-radius: 8px;
+        background: #fff;
+        padding: 24px;
+      }
+
+      .seo-feature h2 {
+        margin: 0 0 10px;
+        font-size: 20px;
+      }
+
+      .seo-feature p {
+        margin: 0;
+        color: #5d6472;
+        line-height: 1.7;
+      }
+
+      .seo-shell a {
+        color: #1677ff;
+        text-decoration: none;
+      }
+
+      .seo-footer {
+        border-top: 1px solid #e4e8f0;
+        padding-top: 24px;
+        color: #7c8493;
+      }
+
+      @media (max-width: 720px) {
+        .seo-shell {
+          padding: 32px 18px;
+        }
+
+        .seo-nav,
+        .seo-footer,
+        .seo-example {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .seo-example {
+          display: flex;
+        }
+
+        .seo-features {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="seo-shell">
+        <header class="seo-nav">
+          <div class="seo-brand">
+            <span class="seo-logo">T</span>
+            <span>TokURL</span>
+          </div>
+          <a href="https://github.com/yaojingang/yao-open-tools/tree/main/tools/tokurl">GitHub 开源</a>
+        </header>
+
+        <section class="seo-hero">
+          <h1>把长链接，<span>一键缩短</span></h1>
+          <p>TokURL 是一个开源、自部署的短链工具，支持极速生成、全球跳转、实时统计、二维码、二次编辑和团队用户管理。</p>
+        </section>
+
+        <section class="seo-card" aria-label="短链示例">
+          <div class="seo-example">
+            <div>
+              <strong>长链接</strong>
+              <span>https://example.com/campaign/landing-page?utm_source=wechat&amp;utm_campaign=launch</span>
+            </div>
+            <span>→</span>
+            <div>
+              <strong>短链接</strong>
+              <code>https://your-domain.com/aB12c</code>
+            </div>
+          </div>
+        </section>
+
+        <section class="seo-features" aria-label="TokURL 功能">
+          <article class="seo-feature">
+            <h2>毫秒级跳转</h2>
+            <p>Redis 缓存命中后直接跳转，访问统计异步写入，外部访问体验稳定快速。</p>
+          </article>
+          <article class="seo-feature">
+            <h2>实时流量统计</h2>
+            <p>按短链统计点击趋势、来源、设备和最近访问事件，支持查看全部链接数据。</p>
+          </article>
+          <article class="seo-feature">
+            <h2>开源自部署</h2>
+            <p>Web、API、worker、Postgres 和 Redis 多容器部署，配置环境变量即可上线。</p>
+          </article>
+        </section>
+
+        <footer class="seo-footer">
+          <span>© 2026 TokURL. 开源短链工具，可自部署使用。</span>
+          <span>
+            <a href="https://github.com/yaojingang/yao-open-tools/tree/main/tools/tokurl">GitHub</a>
+            ·
+            <a href="https://x.com/yaojingang">作者主页</a>
+          </span>
+        </footer>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
