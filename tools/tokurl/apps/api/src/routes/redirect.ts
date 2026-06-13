@@ -14,8 +14,15 @@ interface RouteContext {
 }
 
 const redirectAnalyticsCacheTtlSeconds = 60;
-const redirectTrackingDelayMs = 1_150;
-const redirectTrackingFallbackMs = 2_100;
+const redirectTrackingDelayMs = 300;
+const redirectTrackingFallbackMs = 900;
+const redirectCopyRotationDelayMs = 5_000;
+const redirectCopyLines = [
+  "把漫长的网址，折成一枚轻舟",
+  "让路径变短，让抵达更近",
+  "光标轻落，下一页已在路上",
+  "风从短链经过，页面即将打开"
+];
 const redirectTrackingCsp = [
   "default-src 'self' https: data: blob:",
   "script-src 'self' https: 'unsafe-inline' 'unsafe-eval'",
@@ -75,14 +82,15 @@ function sendDirectRedirect(reply: FastifyReply, context: RouteContext, targetUr
 export function renderTrackedRedirectPage(input: { targetUrl: string; slug: string; analyticsCode: string }): string {
   const targetUrl = toSafeJsonLiteral(input.targetUrl);
   const slug = toSafeJsonLiteral(input.slug);
-  const carouselLines = toSafeJson([
-    "把漫长的网址，折成一枚轻舟",
-    "让路径变短，让抵达更近",
-    "光标轻落，下一页已在路上",
-    "风从短链经过，页面即将打开"
-  ]);
+  const initialCopyIndex = Math.floor(Math.random() * redirectCopyLines.length);
+  const copyLines = toSafeJson(redirectCopyLines);
   const escapedTargetUrl = escapeHtml(input.targetUrl);
   const escapedSlug = escapeHtml(input.slug);
+  const initialCopy = redirectCopyLines[initialCopyIndex] ?? redirectCopyLines[0] ?? "即将抵达";
+  const escapedInitialCopy = escapeHtml(initialCopy);
+  const copyDots = redirectCopyLines
+    .map((_, index) => `<span class="dot${index === initialCopyIndex ? " is-active" : ""}" data-redirect-dot></span>`)
+    .join("");
 
   return `<!doctype html>
 <html lang="zh-CN">
@@ -98,7 +106,8 @@ export function renderTrackedRedirectPage(input: { targetUrl: string; slug: stri
         document.documentElement.classList.add("has-js");
         const targetUrl = ${targetUrl};
         const slug = ${slug};
-        const carouselLines = ${carouselLines};
+        const copyLines = ${copyLines};
+        let copyIndex = ${initialCopyIndex};
         let redirected = false;
         const redirect = () => {
           if (redirected) return;
@@ -108,24 +117,21 @@ export function renderTrackedRedirectPage(input: { targetUrl: string; slug: stri
         const rotateCopy = () => {
           const messageNode = document.querySelector("[data-redirect-line]");
           const dots = Array.from(document.querySelectorAll("[data-redirect-dot]"));
-          if (!messageNode || carouselLines.length < 2) return;
+          if (!messageNode || copyLines.length < 2) return;
 
-          let index = 0;
           const render = () => {
+            copyIndex = (copyIndex + 1) % copyLines.length;
             messageNode.classList.add("is-changing");
             window.setTimeout(() => {
-              messageNode.textContent = carouselLines[index];
+              messageNode.textContent = copyLines[copyIndex];
               dots.forEach((dot, dotIndex) => {
-                dot.classList.toggle("is-active", dotIndex === index);
+                dot.classList.toggle("is-active", dotIndex === copyIndex);
               });
               messageNode.classList.remove("is-changing");
             }, 120);
           };
 
-          window.setInterval(() => {
-            index = (index + 1) % carouselLines.length;
-            render();
-          }, 560);
+          window.setInterval(render, ${redirectCopyRotationDelayMs});
         };
         const trackRedirect = () => {
           try {
@@ -335,13 +341,10 @@ export function renderTrackedRedirectPage(input: { targetUrl: string; slug: stri
     <main>
       <p class="kicker">TokURL</p>
       <h1>即将抵达</h1>
-      <p class="redirect-line" data-redirect-line aria-live="polite">把漫长的网址，折成一枚轻舟</p>
+      <p class="redirect-line" data-redirect-line aria-live="polite">${escapedInitialCopy}</p>
       <div class="progress" aria-hidden="true"><span></span></div>
       <div class="dots" aria-label="抵达进度">
-        <span class="dot is-active" data-redirect-dot></span>
-        <span class="dot" data-redirect-dot></span>
-        <span class="dot" data-redirect-dot></span>
-        <span class="dot" data-redirect-dot></span>
+        ${copyDots}
       </div>
       <a class="manual-link" data-manual-link href="${escapedTargetUrl}" rel="nofollow noreferrer">继续前往</a>
     </main>
