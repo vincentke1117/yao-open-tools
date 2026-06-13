@@ -77,6 +77,7 @@ export const siteSettings = pgTable("site_settings", {
   seoDescription: text("seo_description").notNull(),
   seoKeywords: text("seo_keywords").notNull(),
   analyticsCode: text("analytics_code").notNull().default(""),
+  redirectAnalyticsEnabled: boolean("redirect_analytics_enabled").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
 

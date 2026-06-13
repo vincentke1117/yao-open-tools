@@ -166,7 +166,11 @@ const zhCN = {
   seoKeywordsPlaceholder: "用英文逗号分隔，例如 短链接,短链,二维码",
   analyticsCodeLabel: "网站统计代码",
   analyticsCodePlaceholder: "粘贴 Google Analytics、Plausible、Clarity 或百度统计提供的完整脚本代码",
-  analyticsCodeHelp: "这段代码会注入到所有前台页面。Google Analytics 和百度统计会在内部页面切换时补发 page_view；只粘贴来自可信统计服务的代码。",
+  analyticsCodeHelp:
+    "这段代码会注入到所有前台页面。Google Analytics 和百度统计会在内部页面切换时补发 page_view；只粘贴来自可信统计服务的代码。",
+  redirectAnalyticsEnabledLabel: "短链跳转前统计长链流量",
+  redirectAnalyticsEnabledHelp:
+    "勾选后，短链会先进入极轻量统计页，执行上面的统计代码后再跳转到目标长链；不勾选则保持极速 302 跳转。",
   saveSiteSettings: "保存网站设置",
   runtimeBase: "短链域名",
   runtimeSlug: "短码长度",
@@ -424,7 +428,11 @@ const enUS: typeof zhCN = {
   seoKeywordsPlaceholder: "Comma-separated, for example short links, QR codes, analytics",
   analyticsCodeLabel: "Website analytics code",
   analyticsCodePlaceholder: "Paste the full script snippet from Google Analytics, Plausible, Clarity, or Baidu Analytics",
-  analyticsCodeHelp: "This code is injected into every frontend page. Google Analytics and Baidu Analytics receive page_view events on internal navigation; only paste trusted snippets.",
+  analyticsCodeHelp:
+    "This code is injected into every frontend page. Google Analytics and Baidu Analytics receive page_view events on internal page changes; only paste trusted snippets.",
+  redirectAnalyticsEnabledLabel: "Track traffic before short-link redirects",
+  redirectAnalyticsEnabledHelp:
+    "When enabled, short links briefly load a lightweight tracking page that runs the snippet before continuing to the destination. Leave it off to keep instant 302 redirects.",
   saveSiteSettings: "Save website settings",
   runtimeBase: "Short base URL",
   runtimeSlug: "Slug length",

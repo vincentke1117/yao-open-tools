@@ -52,7 +52,8 @@ describe("site settings service", () => {
       seoTitle: "TokURL Cloud - short links",
       seoDescription: "Managed short links with analytics.",
       seoKeywords: "TokURL,short links",
-      analyticsCode: "<script>window.__tokurlAnalytics = true;</script>"
+      analyticsCode: "<script>window.__tokurlAnalytics = true;</script>",
+      redirectAnalyticsEnabled: true
     });
     const { db, mocks } = createDbMock({ returning: [saved] });
 
@@ -62,6 +63,7 @@ describe("site settings service", () => {
       seoDescription: saved.seoDescription,
       seoKeywords: saved.seoKeywords,
       analyticsCode: saved.analyticsCode,
+      redirectAnalyticsEnabled: saved.redirectAnalyticsEnabled,
       updatedAt: saved.updatedAt.toISOString()
     });
     expect(mocks.insert).toHaveBeenCalledTimes(1);
@@ -82,5 +84,6 @@ describe("site settings service", () => {
     expect(() => updateSiteSettingsSchema.parse({})).toThrow();
     expect(() => updateSiteSettingsSchema.parse({ seoDescription: "x".repeat(301) })).toThrow();
     expect(() => updateSiteSettingsSchema.parse({ analyticsCode: "x".repeat(12_001) })).toThrow();
+    expect(updateSiteSettingsSchema.parse({ redirectAnalyticsEnabled: true }).redirectAnalyticsEnabled).toBe(true);
   });
 });

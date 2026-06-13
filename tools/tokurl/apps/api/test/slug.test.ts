@@ -15,4 +15,12 @@ describe("slug utilities", () => {
     expect(isValidCustomSlug("api")).toBe(false);
     expect(isValidCustomSlug("")).toBe(false);
   });
+
+  it("rejects slugs that conflict with single-domain frontend routes", () => {
+    expect(isValidCustomSlug("create")).toBe(false);
+    expect(isValidCustomSlug("links")).toBe(false);
+    expect(isValidCustomSlug("analytics")).toBe(false);
+    expect(isValidCustomSlug("users")).toBe(false);
+    expect(isValidCustomSlug("settings")).toBe(false);
+  });
 });

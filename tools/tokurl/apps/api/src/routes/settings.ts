@@ -1,13 +1,15 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { Redis } from "ioredis";
 import type { AppConfig } from "../config.js";
 import type { DbClient } from "../db/client.js";
 import { canManageUsers, createAuthGuard } from "../services/auth.js";
-import { getSiteSettings, updateSiteSettings, updateSiteSettingsSchema } from "../services/settings.js";
+import { getSiteSettings, siteSettingsCacheKeys, updateSiteSettings, updateSiteSettingsSchema } from "../services/settings.js";
 import { parseRequest, sendError } from "./http.js";
 
 interface RouteContext {
   config: AppConfig;
   db: DbClient;
+  redis: Redis;
 }
 
 async function requireAdmin(request: FastifyRequest, reply: FastifyReply) {
@@ -41,7 +43,11 @@ export async function registerSettingsRoutes(app: FastifyInstance, context: Rout
       api.patch("/settings/site", async (request, reply) => {
         try {
           const body = parseRequest(updateSiteSettingsSchema, request.body);
-          return await updateSiteSettings(services, body);
+          const settings = await updateSiteSettings(services, body);
+          await context.redis
+            .del(siteSettingsCacheKeys.redirectAnalyticsCode)
+            .catch((error) => request.log.warn({ error }, "Failed to clear redirect analytics cache"));
+          return settings;
         } catch (error) {
           return sendError(reply, error);
         }

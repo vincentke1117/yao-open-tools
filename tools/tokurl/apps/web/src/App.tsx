@@ -129,6 +129,7 @@ interface SiteSettingsFormState {
   seoDescription: string;
   seoKeywords: string;
   analyticsCode: string;
+  redirectAnalyticsEnabled: boolean;
 }
 
 const emptyForm: LinkFormState = {
@@ -163,7 +164,8 @@ const emptySiteSettingsForm: SiteSettingsFormState = {
   seoTitle: "TokURL",
   seoDescription: "",
   seoKeywords: "",
-  analyticsCode: ""
+  analyticsCode: "",
+  redirectAnalyticsEnabled: false
 };
 
 function setNamedMeta(name: string, content: string) {
@@ -540,7 +542,8 @@ export default function App() {
       seoTitle: settings.seoTitle,
       seoDescription: settings.seoDescription,
       seoKeywords: settings.seoKeywords,
-      analyticsCode: settings.analyticsCode
+      analyticsCode: settings.analyticsCode,
+      redirectAnalyticsEnabled: settings.redirectAnalyticsEnabled
     });
   }, [configQuery.data?.siteSettings]);
 
@@ -856,7 +859,8 @@ export default function App() {
         seoTitle: settings.seoTitle,
         seoDescription: settings.seoDescription,
         seoKeywords: settings.seoKeywords,
-        analyticsCode: settings.analyticsCode
+        analyticsCode: settings.analyticsCode,
+        redirectAnalyticsEnabled: settings.redirectAnalyticsEnabled
       });
       showToast(t.toastSiteSettingsSaved);
       await queryClient.invalidateQueries({ queryKey: ["config"] });
@@ -2535,8 +2539,10 @@ docker compose up --build`;
                 rows={2}
               />
             </label>
-            <label className="field block-field analytics-code-field" htmlFor="site-settings-analytics-code">
-              <span>{t.analyticsCodeLabel}</span>
+            <div className="field block-field analytics-code-field">
+              <label className="field-caption" htmlFor="site-settings-analytics-code">
+                {t.analyticsCodeLabel}
+              </label>
               <textarea
                 id="site-settings-analytics-code"
                 maxLength={12_000}
@@ -2547,7 +2553,20 @@ docker compose up --build`;
                 rows={7}
               />
               <small>{t.analyticsCodeHelp}</small>
-            </label>
+              <label className="switch-line analytics-redirect-switch" htmlFor="site-settings-redirect-analytics">
+                <input
+                  id="site-settings-redirect-analytics"
+                  type="checkbox"
+                  checked={siteSettingsForm.redirectAnalyticsEnabled}
+                  onChange={(event) =>
+                    setSiteSettingsForm((current) => ({ ...current, redirectAnalyticsEnabled: event.target.checked }))
+                  }
+                />
+                <MousePointerClick size={16} />
+                <span>{t.redirectAnalyticsEnabledLabel}</span>
+              </label>
+              <small>{t.redirectAnalyticsEnabledHelp}</small>
+            </div>
           </div>
           {siteSettingsMutation.error ? <p className="form-error">{getErrorMessage(siteSettingsMutation.error, t.fallbackError, t)}</p> : null}
           <div className="settings-actions">

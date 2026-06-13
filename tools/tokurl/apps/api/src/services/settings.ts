@@ -6,12 +6,17 @@ import { ServiceError } from "../utils/errors.js";
 
 const defaultSettingsId = "default";
 
+export const siteSettingsCacheKeys = {
+  redirectAnalyticsCode: "tokurl:settings:redirect-analytics-code"
+} as const;
+
 export const defaultSiteSettings = {
   siteName: "TokURL",
   seoTitle: "TokURL",
   seoDescription: "极速生成、全球跳转、实时统计、开源自部署的短链工具。",
   seoKeywords: "TokURL,短链接,短链,链接管理,二维码,数据统计",
-  analyticsCode: ""
+  analyticsCode: "",
+  redirectAnalyticsEnabled: false
 };
 
 export const updateSiteSettingsSchema = z
@@ -20,7 +25,8 @@ export const updateSiteSettingsSchema = z
     seoTitle: z.string().trim().max(160).optional(),
     seoDescription: z.string().trim().max(300).optional(),
     seoKeywords: z.string().trim().max(300).optional(),
-    analyticsCode: z.string().max(12_000).optional()
+    analyticsCode: z.string().max(12_000).optional(),
+    redirectAnalyticsEnabled: z.boolean().optional()
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field is required"
@@ -39,6 +45,7 @@ export function toPublicSiteSettings(settings: SiteSettingsRecord) {
     seoDescription: settings.seoDescription,
     seoKeywords: settings.seoKeywords,
     analyticsCode: settings.analyticsCode,
+    redirectAnalyticsEnabled: settings.redirectAnalyticsEnabled,
     updatedAt: settings.updatedAt.toISOString()
   };
 }
@@ -66,6 +73,7 @@ export async function updateSiteSettings(services: SettingsServices, input: Site
     seoDescription: input.seoDescription ?? current.seoDescription,
     seoKeywords: input.seoKeywords ?? current.seoKeywords,
     analyticsCode: input.analyticsCode ?? current.analyticsCode,
+    redirectAnalyticsEnabled: input.redirectAnalyticsEnabled ?? current.redirectAnalyticsEnabled,
     updatedAt: now
   };
 

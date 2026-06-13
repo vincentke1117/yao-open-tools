@@ -14,6 +14,7 @@ export interface SiteSettings {
   seoDescription: string;
   seoKeywords: string;
   analyticsCode: string;
+  redirectAnalyticsEnabled: boolean;
   updatedAt: string;
 }
 

@@ -6,12 +6,17 @@ const makeSlug = customAlphabet(base62Alphabet);
 const reservedSlugs = new Set([
   "api",
   "admin",
+  "analytics",
   "assets",
+  "create",
   "favicon.ico",
   "health",
+  "links",
   "metrics",
   "robots.txt",
-  "static"
+  "settings",
+  "static",
+  "users",
 ]);
 
 export function generateSlug(length: number): string {

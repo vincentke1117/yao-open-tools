@@ -61,7 +61,7 @@ export async function buildApp(dependencies: AppDependencies = {}) {
 
   await registerAuthRoutes(app, { config, db, redis });
   await registerUserRoutes(app, { config, db });
-  await registerSettingsRoutes(app, { config, db });
+  await registerSettingsRoutes(app, { config, db, redis });
   await registerLinkRoutes(app, { config, db, redis });
   await registerRedirectRoute(app, { config, db, redis });
 

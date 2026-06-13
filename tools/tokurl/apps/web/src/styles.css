@@ -407,7 +407,8 @@ p {
 
 .eyebrow,
 .card-kicker,
-.field span,
+.field > span,
+.field-caption,
 .kpi span,
 .setting-rows span {
   color: var(--text-3);
@@ -1835,6 +1836,11 @@ tbody tr.selected-row {
   font-size: 12px;
   font-weight: 650;
   line-height: 1.5;
+}
+
+.analytics-code-field .analytics-redirect-switch {
+  cursor: pointer;
+  margin-top: 10px;
 }
 
 .settings-actions {
