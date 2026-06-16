@@ -180,7 +180,7 @@ function esc($value) {
                                 <h3 class="text-sm font-medium text-gray-500" x-text="stat.label"></h3>
                                 <span :class="stat.trendUp ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'" class="text-xs px-2 py-0.5 rounded-full font-medium" x-text="stat.trend"></span>
                             </div>
-                            <div class="text-3xl font-bold text-gray-900 tracking-tight mb-2" x-text="stat.value"></div>
+                            <div class="text-3xl font-bold text-gray-900 mb-2" x-text="stat.value"></div>
                             <div class="text-xs text-gray-400" x-text="stat.detail || ''"></div>
                         </div>
                     </template>

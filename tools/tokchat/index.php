@@ -127,7 +127,7 @@ function esc($value) {
             font-weight: 700;
             margin: 1.5rem 0 1rem;
             color: #111827;
-            letter-spacing: -0.025em;
+            letter-spacing: 0;
             border-bottom: 2px solid #e5e7eb;
             padding-bottom: 0.5rem;
         }
@@ -136,7 +136,7 @@ function esc($value) {
             font-weight: 700;
             margin: 1.25rem 0 0.75rem;
             color: #1f2937;
-            letter-spacing: -0.02em;
+            letter-spacing: 0;
         }
         .markdown-content h3 {
             font-size: 1.125rem;
@@ -149,6 +149,13 @@ function esc($value) {
             font-weight: 600;
             margin: 0.875rem 0 0.5rem;
             color: #4b5563;
+        }
+        .markdown-content h5,
+        .markdown-content h6 {
+            font-size: 0.9375rem;
+            font-weight: 600;
+            margin: 0.75rem 0 0.4rem;
+            color: #64748b;
         }
 
         /* 段落 */
@@ -241,6 +248,43 @@ function esc($value) {
             border-radius: 1px;
         }
 
+        .markdown-content li.task-list-item {
+            list-style: none;
+            padding-left: 1.75rem;
+        }
+        .markdown-content li.task-list-item::before {
+            display: none;
+        }
+        .markdown-content ul li.task-list-item::before {
+            display: none;
+        }
+        .markdown-content .task-checkbox {
+            position: absolute;
+            left: 0;
+            top: 0.25rem;
+            width: 1.125rem;
+            height: 1.125rem;
+            border-radius: 0.35rem;
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.04);
+        }
+        .markdown-content .task-checkbox.checked {
+            border-color: #2563eb;
+            background: #2563eb;
+        }
+        .markdown-content .task-checkbox.checked::after {
+            content: '';
+            position: absolute;
+            left: 0.36rem;
+            top: 0.16rem;
+            width: 0.32rem;
+            height: 0.58rem;
+            border: solid #fff;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+
         /* 加粗 - 醒目但不刺眼 */
         .markdown-content strong {
             font-weight: 600;
@@ -254,6 +298,11 @@ function esc($value) {
         .markdown-content em {
             font-style: italic;
             color: #6b7280;
+        }
+        .markdown-content del {
+            color: #64748b;
+            text-decoration: line-through;
+            text-decoration-thickness: 2px;
         }
 
         /* 行内代码 - 清晰可辨识 */
@@ -280,6 +329,21 @@ function esc($value) {
             line-height: 1.7;
             border: 1px solid #334155;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .markdown-content pre[data-lang] {
+            position: relative;
+            padding-top: 2.25rem;
+        }
+        .markdown-content pre[data-lang]::before {
+            content: attr(data-lang);
+            position: absolute;
+            top: 0.65rem;
+            right: 0.9rem;
+            color: #94a3b8;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0;
+            text-transform: uppercase;
         }
         .markdown-content pre code {
             background: none;
@@ -317,15 +381,21 @@ function esc($value) {
         }
 
         /* 表格 - 现代化设计 */
+        .markdown-content .markdown-table-wrap {
+            margin: 1rem 0;
+            overflow-x: auto;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
         .markdown-content table {
             width: 100%;
+            min-width: 34rem;
             border-collapse: separate;
             border-spacing: 0;
-            margin: 1rem 0;
+            margin: 0;
             font-size: 0.875rem;
             border-radius: 0.75rem;
             overflow: hidden;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
         .markdown-content th {
             background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
@@ -370,6 +440,15 @@ function esc($value) {
             border-bottom-color: #2563eb;
             border-bottom-style: solid;
         }
+        .markdown-content img {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            margin: 1rem 0;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.75rem;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+        }
 
         /* 移动端安全区域适配（底部刘海屏） */
         .safe-area-bottom {
@@ -408,7 +487,7 @@ function esc($value) {
             <div class="w-8 h-8 rounded bg-blue-600 flex items-center justify-center text-white mr-3 shadow-sm">
                 <i class="fas fa-rocket"></i>
             </div>
-            <h1 class="font-bold text-lg text-slate-800 tracking-tight truncate"><?php echo esc($siteSettings['frontend_site_name']); ?></h1>
+            <h1 class="font-bold text-lg text-slate-800 truncate"><?php echo esc($siteSettings['frontend_site_name']); ?></h1>
         </div>
 
         <!-- 新建对话按钮 -->
@@ -1596,28 +1675,53 @@ function esc($value) {
             // 可以动态更新右侧栏的推荐问题
         }
 
-        // 世界级Markdown渲染
+        // 安全的 Markdown 渲染：先转义，再按白名单恢复常用格式。
         function renderMarkdown(text) {
             if (!text) return '';
-            text = String(text);
+            text = String(text).replace(/\r\n?/g, '\n');
 
             // 保护代码块，防止内部内容被处理
             const codeBlocks = [];
-            text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (match, lang, code) => {
+            text = text.replace(/```([^\n`]*)\n?([\s\S]*?)```/g, (match, rawLang, code) => {
                 const placeholder = `@@CODEBLOCK${codeBlocks.length}@@`;
-                codeBlocks.push(`<pre><code>${escapeHtml(code.trim())}</code></pre>`);
+                const lang = String(rawLang || '').trim().replace(/[^\w#+.-]/g, '').slice(0, 32);
+                const dataLang = lang ? ` data-lang="${escapeAttribute(lang)}"` : '';
+                const classLang = lang ? ` class="language-${escapeAttribute(lang.replace(/[^\w-]/g, '-'))}"` : '';
+                codeBlocks.push(`<pre${dataLang}><code${classLang}>${escapeHtml(code.replace(/^\n|\n$/g, ''))}</code></pre>`);
                 return placeholder;
             });
 
             // 保护行内代码
             const inlineCodes = [];
-            text = text.replace(/`([^`]+)`/g, (match, code) => {
+            text = text.replace(/`([^`\n]+)`/g, (match, code) => {
                 const placeholder = `@@INLINECODE${inlineCodes.length}@@`;
                 inlineCodes.push(`<code>${escapeHtml(code)}</code>`);
                 return placeholder;
             });
 
             text = escapeHtml(text);
+            const inlineHtml = [];
+            const stashInlineHtml = (html) => {
+                const placeholder = `@@INLINEHTML${inlineHtml.length}@@`;
+                inlineHtml.push(html);
+                return placeholder;
+            };
+            const normalizeUrl = (url) => String(url || '')
+                .replace(/&amp;/g, '&')
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;/g, "'")
+                .trim();
+            const isSafeUrl = (url) => /^(https?:\/\/|\/(?!\/)|#)/i.test(url);
+            const stripHtmlTags = (value) => String(value || '').replace(/<[^>]*>/g, '');
+            const splitTrailingPunctuation = (url) => {
+                let cleanUrl = url;
+                let tail = '';
+                while (/[.,!?;:，。！？；：）)]$/.test(cleanUrl)) {
+                    tail = cleanUrl.slice(-1) + tail;
+                    cleanUrl = cleanUrl.slice(0, -1);
+                }
+                return [cleanUrl, tail];
+            };
 
             // 处理表格
             text = text.replace(/^\|(.+)\|\s*\n\|[-:\s|]+\|\s*\n((?:\|.+\|\s*\n?)*)/gm, (match, header, body) => {
@@ -1629,13 +1733,15 @@ function esc($value) {
                     return `<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`;
                 }).join('');
 
-                return `<table>${headerRow}${bodyRows}</table>`;
+                return `<div class="markdown-table-wrap"><table>${headerRow}${bodyRows}</table></div>`;
             });
 
             // 处理标题 - 支持行首或行内（如 "文字。## 标题"）
             // 先处理行内标题：将 "。## 标题" 或 "。# 标题" 转换为换行+标题
-            text = text.replace(/([。！？\.!?])\s*(#{1,4})\s+([^\n]+)/g, '$1\n$2 $3');
+            text = text.replace(/([。！？\.!?])\s*(#{1,6})\s+([^\n]+)/g, '$1\n$2 $3');
             // 处理标题 - 保持层级
+            text = text.replace(/^\s*#{6}\s+(.+)$/gm, '<h6>$1</h6>');
+            text = text.replace(/^\s*#{5}\s+(.+)$/gm, '<h5>$1</h5>');
             text = text.replace(/^\s*#{4}\s+(.+)$/gm, '<h4>$1</h4>');
             text = text.replace(/^\s*#{3}\s+(.+)$/gm, '<h3>$1</h3>');
             text = text.replace(/^\s*#{2}\s+(.+)$/gm, '<h2>$1</h2>');
@@ -1657,6 +1763,7 @@ function esc($value) {
             text = text.replace(/___(.+?)___/gs, '<strong><em>$1</em></strong>');
             text = text.replace(/__([^_]+?)__/g, '<strong>$1</strong>');
             text = text.replace(/(?<!_)_([^_\n]+?)_(?!_)/g, '<em>$1</em>');
+            text = text.replace(/~~([^~]+?)~~/g, '<del>$1</del>');
 
             // 清理未匹配的孤立 ** 或 __ 标记
             // 行首独立的 **
@@ -1674,17 +1781,21 @@ function esc($value) {
                 return '<ol>' + match.replace(/<\/?oli>/g, (tag) => tag.replace('oli', 'li')) + '</ol>';
             });
 
-            // 处理无序列表（包含嵌套子列表）
+            // 处理任务列表和无序列表（包含嵌套子列表）
+            text = text.replace(/^(\s*)[-*+]\s+\[( |x|X)\]\s+(.+)$/gm, (match, indent, checked, content) => {
+                const level = Math.floor((indent || '').length / 2);
+                return `<tli data-level="${level}" data-checked="${/[xX]/.test(checked) ? 'true' : 'false'}">${content}</tli>`;
+            });
             // 先处理嵌套列表（带缩进的 - 或 * ）
-            text = text.replace(/^(\s{2,})[-*•]\s+(.+)$/gm, (match, indent, content) => {
+            text = text.replace(/^(\s{2,})[-*+•]\s+(.+)$/gm, (match, indent, content) => {
                 const level = Math.floor(indent.length / 2);
                 return `<sli data-level="${level}">${content}</sli>`;
             });
             // 处理一级无序列表
-            text = text.replace(/^[-*•]\s+(.+)$/gm, '<uli>$1</uli>');
+            text = text.replace(/^[-*+•]\s+(.+)$/gm, '<uli>$1</uli>');
 
             // 将连续的列表项组合成列表
-            text = text.replace(/(<uli>.*?<\/uli>|<sli[^>]*>.*?<\/sli>)(\n?)/g, (match, item, newline) => {
+            text = text.replace(/(<uli>.*?<\/uli>|<sli[^>]*>.*?<\/sli>|<tli[^>]*>.*?<\/tli>)(\n?)/g, (match, item, newline) => {
                 return item + newline;
             });
 
@@ -1695,18 +1806,20 @@ function esc($value) {
             let listStack = [];
 
             for (let line of listLines) {
-                if (line.startsWith('<uli>') || line.startsWith('<sli')) {
+                if (line.startsWith('<uli>') || line.startsWith('<sli') || line.startsWith('<tli')) {
                     if (!inList) {
                         listResult.push('<ul>');
                         listStack.push(0);
                         inList = true;
                     }
 
-                    if (line.startsWith('<sli')) {
+                    if (line.startsWith('<sli') || line.startsWith('<tli')) {
                         // 嵌套列表项
                         const levelMatch = line.match(/data-level="(\d+)"/);
                         const level = levelMatch ? parseInt(levelMatch[1]) : 1;
-                        const content = line.replace(/<sli[^>]*>/, '').replace(/<\/sli>/, '');
+                        const isTask = line.startsWith('<tli');
+                        const checked = /data-checked="true"/.test(line);
+                        const content = line.replace(/<[st]li[^>]*>/, '').replace(/<\/[st]li>/, '');
 
                         // 进入更深层级
                         while (listStack.length <= level) {
@@ -1718,7 +1831,11 @@ function esc($value) {
                             listResult.push('</ul>');
                             listStack.pop();
                         }
-                        listResult.push(`<li>${content}</li>`);
+                        if (isTask) {
+                            listResult.push(`<li class="task-list-item"><span class="task-checkbox${checked ? ' checked' : ''}" role="checkbox" aria-checked="${checked ? 'true' : 'false'}"></span><span>${content}</span></li>`);
+                        } else {
+                            listResult.push(`<li>${content}</li>`);
+                        }
                     } else {
                         // 一级列表项
                         // 先关闭所有嵌套
@@ -1746,13 +1863,32 @@ function esc($value) {
             }
             text = listResult.join('\n');
 
-            // 处理链接，仅允许 http/https 和站内路径
+            // 处理图片和链接，仅允许 http/https、站内路径和锚点
+            text = text.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)/g, (match, alt, url) => {
+                const decodedUrl = normalizeUrl(url);
+                if (!isSafeUrl(decodedUrl)) {
+                    return stripHtmlTags(alt);
+                }
+                const cleanAlt = stripHtmlTags(alt);
+                return stashInlineHtml(`<img src="${escapeAttribute(decodedUrl)}" alt="${escapeAttribute(cleanAlt)}" loading="lazy" referrerpolicy="no-referrer">`);
+            });
+
             text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, url) => {
-                const decodedUrl = url.replace(/&amp;/g, '&').trim();
-                if (!/^(https?:\/\/|\/(?!\/)|#)/i.test(decodedUrl)) {
+                const decodedUrl = normalizeUrl(url);
+                if (!isSafeUrl(decodedUrl)) {
                     return label;
                 }
-                return `<a href="${escapeHtml(decodedUrl)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+                return stashInlineHtml(`<a href="${escapeAttribute(decodedUrl)}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+            });
+
+            // 处理裸链接，避免把已经生成的 a/img 标签二次包裹
+            text = text.replace(/(^|[\s(>])((?:https?:\/\/)[^\s<]+)/g, (match, prefix, rawUrl) => {
+                let [visibleUrl, tail] = splitTrailingPunctuation(rawUrl);
+                const decodedUrl = normalizeUrl(visibleUrl);
+                if (!isSafeUrl(decodedUrl)) {
+                    return match;
+                }
+                return `${prefix}${stashInlineHtml(`<a href="${escapeAttribute(decodedUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(decodedUrl)}</a>`)}${tail}`;
             });
 
             // 处理段落 - 更智能的换行处理
@@ -1762,8 +1898,8 @@ function esc($value) {
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
-                const isBlockElement = /^<(h[1-4]|ul|ol|li|table|tr|th|td|blockquote|pre|hr)/.test(line);
-                const isClosingBlock = /^<\/(ul|ol|table|blockquote)>/.test(line);
+                const isBlockElement = /^<(h[1-6]|ul|ol|li|table|tr|th|td|blockquote|pre|hr|div class="markdown-table-wrap")/.test(line);
+                const isClosingBlock = /^<\/(ul|ol|table|blockquote|div)>/.test(line);
                 const isEmpty = line.trim() === '';
 
                 if (isEmpty) {
@@ -1801,18 +1937,24 @@ function esc($value) {
                 text = text.replace(`@@INLINECODE${i}@@`, code);
             });
 
+            // 恢复白名单内的图片、链接等行内 HTML
+            inlineHtml.forEach((html, i) => {
+                text = text.replace(`@@INLINEHTML${i}@@`, html);
+            });
+
             // 清理
             text = text.replace(/<p><\/p>/g, '');
             text = text.replace(/<p><br>/g, '<p>');
             text = text.replace(/<br><\/p>/g, '</p>');
-            text = text.replace(/<p>(<h[1-4]>)/g, '$1');
-            text = text.replace(/(<\/h[1-4]>)<\/p>/g, '$1');
-            text = text.replace(/<p>(<ul|<ol|<table|<blockquote|<pre|<hr)/g, '$1');
-            text = text.replace(/(<\/ul>|<\/ol>|<\/table>|<\/blockquote>|<\/pre>|<hr>)<\/p>/g, '$1');
+            text = text.replace(/<p>(<h[1-6]>)/g, '$1');
+            text = text.replace(/(<\/h[1-6]>)<\/p>/g, '$1');
+            text = text.replace(/<p>(<ul|<ol|<table|<div class="markdown-table-wrap"|<blockquote|<pre|<hr)/g, '$1');
+            text = text.replace(/(<\/ul>|<\/ol>|<\/table>|<\/div>|<\/blockquote>|<\/pre>|<hr>)<\/p>/g, '$1');
 
             // 清理可能未被恢复的占位符（安全网）
             text = text.replace(/@@CODEBLOCK\d+@@/g, '');
             text = text.replace(/@@INLINECODE\d+@@/g, '');
+            text = text.replace(/@@INLINEHTML\d+@@/g, '');
 
             return text;
         }
