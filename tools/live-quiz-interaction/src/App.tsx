@@ -151,26 +151,63 @@ function ResultDialog({
   onClose: () => void
 }) {
   const correct = feedback.kind === 'correct'
-  const locked = feedback.kind === 'locked'
+  const copy = getDialogCopy(feedback)
 
   return (
     <div className="dialog-layer" role="dialog" aria-live="assertive">
       <div className={`result-dialog ${correct ? 'is-correct' : 'is-wrong'}`}>
-        <div className="dialog-icon" aria-hidden="true">
-          {correct ? <Check size={22} /> : <X size={22} />}
-        </div>
-        <div>
-          <strong>{correct ? '答对了' : locked ? '公布答案' : '答错了'}</strong>
-          <p>{feedback.message}</p>
-        </div>
-        <span className="dialog-points">{formatPoints(feedback.pointsDelta)}</span>
-        <Volume2 className="dialog-sound" aria-label="已播放音效" size={16} />
         <button type="button" className="dialog-close" onClick={onClose}>
           关闭
         </button>
+        <div className="dialog-icon" aria-hidden="true">
+          {correct ? <Check size={22} /> : <X size={22} />}
+        </div>
+        <div className="dialog-copy">
+          <span>{copy.eyebrow}</span>
+          <strong>{copy.title}</strong>
+          <p>{copy.body}</p>
+          <small>{copy.detail}</small>
+        </div>
+        <div className="dialog-footer">
+          <span className="dialog-points">
+            {formatPoints(feedback.pointsDelta)}
+            <small>积分变化</small>
+          </span>
+          <span className="dialog-sound">
+            <Volume2 aria-hidden="true" size={18} />
+            已播放音效
+          </span>
+        </div>
       </div>
     </div>
   )
+}
+
+function getDialogCopy(feedback: QuizFeedback) {
+  if (feedback.kind === 'correct') {
+    return {
+      eyebrow: '回答正确',
+      title: '太棒了，答对啦！',
+      body: '这道题判断得很稳，给直播间同学们一个满分示范。',
+      detail: feedback.message,
+    }
+  }
+
+  if (feedback.kind === 'locked') {
+    return {
+      eyebrow: '公布答案',
+      title: '这题先记住正确答案',
+      body: `正确答案是：${feedback.correctAnswer}。带大家把关键概念再过一遍。`,
+      detail: feedback.message,
+    }
+  }
+
+  return {
+    eyebrow: '再试一次',
+    title: '没关系，再想一想',
+    body: '先看空格前后的限定词，抓住概念再作答。',
+    detail: feedback.message,
+  }
 }
 
 function formatPoints(points: number) {

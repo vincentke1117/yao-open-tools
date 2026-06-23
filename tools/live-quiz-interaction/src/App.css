@@ -221,33 +221,35 @@ button:disabled {
 
 .dialog-layer {
   position: fixed;
-  inset: 78px 0 auto;
+  inset: 0;
   z-index: 30;
   display: grid;
   place-items: center;
+  padding: 24px;
+  background: rgba(245, 244, 237, 0.48);
   pointer-events: none;
 }
 
 .result-dialog {
-  width: min(500px, calc(100vw - 28px));
+  position: relative;
+  width: min(560px, calc(100vw - 32px));
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto auto auto;
-  align-items: center;
-  gap: 11px;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 18px;
   border: 1px solid var(--ring);
-  border-radius: 10px;
-  padding: 12px 14px;
+  border-radius: 14px;
+  padding: 28px;
   background: #fffefa;
   box-shadow:
     0 0 0 1px #ffffff inset,
-    0 18px 42px rgba(20, 20, 19, 0.18);
+    0 24px 70px rgba(20, 20, 19, 0.22);
   pointer-events: auto;
   animation: dialog-in 180ms ease-out;
 }
 
 .dialog-icon {
-  width: 38px;
-  height: 38px;
+  width: 66px;
+  height: 66px;
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -255,31 +257,82 @@ button:disabled {
   background: var(--brand);
 }
 
-.result-dialog strong {
-  display: block;
-  color: var(--ink);
-  font-size: 18px;
+.dialog-copy {
+  min-width: 0;
+  padding-right: 48px;
 }
 
-.result-dialog p {
-  margin-top: 2px;
-  color: var(--olive);
+.dialog-copy > span {
+  display: block;
+  color: var(--brand);
   font-size: 13px;
+  font-weight: 800;
+}
+
+.dialog-copy strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--ink);
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.dialog-copy p {
+  margin-top: 10px;
+  color: var(--warm);
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+.dialog-copy small {
+  display: block;
+  margin-top: 8px;
+  color: var(--olive);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.dialog-footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
 }
 
 .dialog-points {
+  display: grid;
+  gap: 2px;
   color: var(--brand);
   font-family: Georgia, serif;
-  font-size: 25px;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.dialog-points small {
+  color: var(--olive);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .dialog-sound {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--stone);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .dialog-close {
-  min-height: 34px;
-  padding: 0 10px;
+  position: absolute;
+  inset-block-start: 18px;
+  inset-inline-end: 18px;
+  min-height: 36px;
+  padding: 0 12px;
   color: var(--olive);
   background: var(--paper);
 }
@@ -352,15 +405,39 @@ button:disabled {
   }
 
   .result-dialog {
-    grid-template-columns: 34px minmax(0, 1fr) auto;
+    grid-template-columns: 54px minmax(0, 1fr);
+    gap: 14px;
+    padding: 22px;
+  }
+
+  .dialog-icon {
+    width: 52px;
+    height: 52px;
+  }
+
+  .dialog-copy {
+    padding-right: 0;
+  }
+
+  .dialog-copy strong {
+    font-size: 23px;
+  }
+
+  .dialog-copy p {
+    font-size: 15px;
+  }
+
+  .dialog-footer {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .dialog-points {
+    font-size: 30px;
   }
 
   .dialog-layer {
-    inset: 12px 0 auto;
+    padding: 16px;
   }
 
-  .dialog-sound,
-  .dialog-close {
-    display: none;
-  }
 }

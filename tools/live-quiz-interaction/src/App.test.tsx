@@ -27,7 +27,8 @@ describe('App', () => {
     await user.type(screen.getByLabelText('答案'), '0')
     await user.click(screen.getByRole('button', { name: '提交' }))
 
-    expect(screen.getByRole('dialog')).toHaveTextContent('答对了')
+    expect(screen.getByRole('dialog')).toHaveTextContent('太棒了，答对啦！')
+    expect(screen.getByText('这道题判断得很稳，给直播间同学们一个满分示范。')).toBeInTheDocument()
     expect(screen.getByText('回答正确，获得满分')).toBeInTheDocument()
     expect(screen.queryByText('解析')).not.toBeInTheDocument()
     expect(document.querySelector('.coach')).not.toBeInTheDocument()
@@ -41,7 +42,8 @@ describe('App', () => {
     await user.type(screen.getByLabelText('答案'), '1')
     await user.click(screen.getByRole('button', { name: '提交' }))
 
-    expect(screen.getByRole('dialog')).toHaveTextContent('答错了')
+    expect(screen.getByRole('dialog')).toHaveTextContent('没关系，再想一想')
+    expect(screen.getByText('先看空格前后的限定词，抓住概念再作答。')).toBeInTheDocument()
     expect(screen.getByText('回答错误，已触发第 1 次提醒')).toBeInTheDocument()
     expect(screen.queryByText('提示')).not.toBeInTheDocument()
     expect(document.querySelector('.coach')).not.toBeInTheDocument()
