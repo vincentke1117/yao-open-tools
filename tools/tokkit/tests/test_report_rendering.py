@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from tokkit.cli import render_range_report
+from tokkit.cli import render_range_report, render_snapshot_report
 from tokkit.db import UsageRecord, init_db, upsert_usage_record
 
 
@@ -192,6 +192,52 @@ class ReportRenderingTests(unittest.TestCase):
         self.assertEqual(payload["by_model"][0]["billable_cost_usd"], 90.0)
         self.assertAlmostEqual(by_date[dates[0]]["billable_cost_usd"], 30.0)
         self.assertAlmostEqual(by_date[dates[1]]["billable_cost_usd"], 60.0)
+
+    def test_snapshot_report_combines_menu_bar_payload_sections(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        tz = ZoneInfo("Asia/Shanghai")
+        target_date = datetime.now(tz).date().isoformat()
+        upsert_usage_record(
+            conn,
+            UsageRecord(
+                source="codex:vscode",
+                app="codex",
+                external_id=f"snapshot-1:{target_date}T08:00:00+08:00",
+                started_at=f"{target_date}T08:00:00+08:00",
+                local_date=target_date,
+                model="gpt-5.5",
+                input_tokens=1200,
+                output_tokens=80,
+                cached_input_tokens=700,
+                reasoning_tokens=20,
+                total_tokens=1300,
+                metadata={"originator": "Codex Desktop", "model_provider": "openai"},
+            ),
+        )
+        conn.commit()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            budget_path = Path(tmp_dir) / "budget.json"
+            budget_path.write_text(
+                json.dumps({"currency": "USD", "daily_est_usd": 25.0}),
+                encoding="utf-8",
+            )
+            with patch.dict(os.environ, {"TOKKIT_BUDGET_PATH": str(budget_path)}):
+                payload = json.loads(render_snapshot_report(conn, Path(tmp_dir) / "usage.sqlite", tz, last_days=7))
+        conn.close()
+
+        self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(payload["timezone"], "Asia/Shanghai")
+        self.assertEqual(payload["today"]["date"], target_date)
+        self.assertEqual(payload["today"]["totals"]["total_tokens"], 1300)
+        self.assertEqual(payload["range"]["range_days"], 7)
+        self.assertEqual(payload["range"]["by_date"][0]["local_date"], target_date)
+        self.assertEqual(payload["budget"]["windows"][0]["window"], "Today")
+        self.assertEqual(payload["clients"]["period"], "last 7 day(s)")
+        self.assertEqual(payload["ledger"]["usage_records"], 1)
+        self.assertEqual(payload["commands"]["refresh"], ["tok", "scan", "all"])
 
 
 if __name__ == "__main__":

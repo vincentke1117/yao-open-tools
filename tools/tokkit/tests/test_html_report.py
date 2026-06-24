@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
@@ -23,6 +24,7 @@ from tokkit.tok import (
     _run_html_command,
     _run_report,
     _run_scan_command,
+    _run_snapshot_command,
 )
 
 
@@ -32,7 +34,8 @@ class HtmlReportTests(unittest.TestCase):
         conn.row_factory = sqlite3.Row
         init_db(conn)
         tz = ZoneInfo("Asia/Shanghai")
-        for day, total in (("2026-05-02", 1000), ("2026-05-03", 2500)):
+        today = datetime.now(tz).date()
+        for day, total in (((today - timedelta(days=1)).isoformat(), 1000), (today.isoformat(), 2500)):
             upsert_usage_record(
                 conn,
                 UsageRecord(
@@ -115,6 +118,19 @@ class HtmlReportTests(unittest.TestCase):
 
         self.assertEqual(status, 0)
         run_tokkit.assert_called_once_with(["billing", "--json"])
+
+    def test_tok_snapshot_command_maps_json_without_report_side_effects(self) -> None:
+        with patch("tokkit.tok._run_tokkit", return_value=0) as run_tokkit:
+            status = _run_snapshot_command(["--last", "14"])
+
+        self.assertEqual(status, 0)
+        run_tokkit.assert_called_once_with(["snapshot", "--json", "--last", "14"])
+
+        with patch("tokkit.tok._run_tokkit", return_value=0) as run_tokkit:
+            status = _run_snapshot_command(["7"])
+
+        self.assertEqual(status, 0)
+        run_tokkit.assert_called_once_with(["snapshot", "--json", "--last", "7"])
 
     def test_daily_html_report_generates_once_without_stdout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

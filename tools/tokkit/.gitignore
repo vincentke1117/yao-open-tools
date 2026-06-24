@@ -3,6 +3,7 @@
 build/
 dist/
 *.egg-info/
+macos/TokKitMenu/.build/
 
 __pycache__/
 *.pyc

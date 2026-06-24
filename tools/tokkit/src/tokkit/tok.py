@@ -31,6 +31,7 @@ Reports / 报表:
   tok html week             Generate an HTML report for last 7 days / 生成最近 7 天 HTML 报告
   tok html last 14          Generate an HTML report for last N days / 生成最近 N 天 HTML 报告
   tok html open             Generate and open the HTML report / 生成并打开 HTML 报告
+  tok snapshot              Show compact JSON for menu bar widgets / 输出菜单栏组件使用的精简 JSON
   tok doctor                Inspect local setup and client coverage / 检查本地配置和客户端覆盖情况
   tok setup                 Inspect or apply common setup steps / 检查或执行常见安装配置步骤
   tok budget                Show budget status for today/week/month / 查看今天、本周、本月预算状态
@@ -118,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_report(["report-range", "--last", days])
     if command == "html":
         return _run_html_command(args[1:])
+    if command == "snapshot":
+        return _run_snapshot_command(args[1:])
     if _is_date(command):
         return _run_report(["report-daily", "--date", command])
     if command == "scan":
@@ -257,6 +260,28 @@ def _run_html_command(args: list[str]) -> int:
         idx += 1
     command.extend(["--last", days])
     return _run_report(command)
+
+
+def _run_snapshot_command(args: list[str]) -> int:
+    command = ["snapshot", "--json"]
+    idx = 0
+    while idx < len(args):
+        arg = args[idx]
+        if arg == "--last":
+            if idx + 1 >= len(args):
+                print("tok: --last requires a day count", file=sys.stderr)
+                return 1
+            command.extend([arg, args[idx + 1]])
+            idx += 1
+        elif arg in {"json", "--json"}:
+            pass
+        elif _is_positive_int(arg):
+            command.extend(["--last", arg])
+        else:
+            print(f"tok: unsupported snapshot target '{arg}'", file=sys.stderr)
+            return 1
+        idx += 1
+    return _run_tokkit(command)
 
 
 def _run_files_command() -> int:
