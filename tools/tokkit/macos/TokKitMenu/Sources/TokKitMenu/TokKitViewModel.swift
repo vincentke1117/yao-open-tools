@@ -50,6 +50,13 @@ final class TokKitViewModel: ObservableObject {
         }
     }
 
+    func refreshOnOpen() async {
+        if snapshot == nil {
+            await loadSnapshot(forceLoadingState: true)
+        }
+        await refresh()
+    }
+
     func openHTML() async {
         do {
             try await TokKitCommandService.shared.openHTML(lastDays: trendWindow.days)

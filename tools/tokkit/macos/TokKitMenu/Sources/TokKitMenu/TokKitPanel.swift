@@ -18,6 +18,9 @@ struct TokKitPanel: View {
         }
         .frame(width: TokKitTheme.panelWidth, height: panelHeight)
         .background(TokKitTheme.panel)
+        .onAppear {
+            Task { await model.refreshOnOpen() }
+        }
         .onReceive(timer) { _ in
             Task { await model.loadSnapshot() }
         }
@@ -126,8 +129,8 @@ struct TokKitPanel: View {
             GridRow {
                 MetricCard(
                     title: "今日用量",
-                    meta: "\(today.records) records",
-                    value: TokenFormat.compact(today.totalTokens)
+                    value: TokenFormat.compact(today.totalTokens),
+                    detail: "解决问题数：\(TokenFormat.integer(today.records))"
                 )
 
                 BudgetCard(window: budget)
@@ -308,15 +311,14 @@ private struct Chip: View {
 
 private struct MetricCard: View {
     let title: String
-    let meta: String
     let value: String
+    let detail: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack {
                 Text(title)
                 Spacer()
-                Text(meta)
             }
             .font(.system(size: 12))
             .foregroundStyle(TokKitTheme.stone)
@@ -326,6 +328,11 @@ private struct MetricCard: View {
                 .foregroundStyle(TokKitTheme.brand)
                 .fontDesign(.serif)
                 .minimumScaleFactor(0.75)
+                .lineLimit(1)
+
+            Text(detail)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(TokKitTheme.stone)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)

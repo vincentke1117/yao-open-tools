@@ -8,9 +8,6 @@ struct TokKitMenuApp: App {
         MenuBarExtra {
             TokKitPanel(model: model)
                 .frame(width: TokKitTheme.panelWidth)
-                .task {
-                    await model.loadSnapshot()
-                }
         } label: {
             Label {
                 Text(model.menuBarTitle)
