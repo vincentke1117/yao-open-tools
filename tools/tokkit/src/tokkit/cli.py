@@ -233,6 +233,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     clients_cmd.add_argument("--json", action="store_true")
 
+    snapshot_cmd = subparsers.add_parser(
+        "snapshot",
+        help="Show a compact JSON payload for menu bar and widget integrations.",
+    )
+    snapshot_cmd.add_argument("--last", type=int, default=7, help="Number of days to include in the trend window.")
+    snapshot_cmd.add_argument(
+        "--json",
+        action="store_true",
+        help="Accepted for consistency. Snapshot output is always JSON.",
+    )
+
     pricing_cmd = subparsers.add_parser("pricing", help="Show the local pricing profiles used for cost estimation.")
     pricing_cmd.add_argument("--json", action="store_true")
 
@@ -443,6 +454,10 @@ def main(argv: list[str] | None = None) -> int:
                 json_mode=args.json,
             )
             print(rendered)
+            return 0
+
+        if args.command == "snapshot":
+            print(render_snapshot_report(conn, args.db, tz, last_days=args.last))
             return 0
 
         if args.command == "pricing":
@@ -1086,6 +1101,50 @@ def render_html_report(conn: sqlite3.Connection, last_days: int, tz) -> str:
         generated_at=generated_at,
         timezone_name=timezone_name,
     )
+
+
+def render_snapshot_report(conn: sqlite3.Connection, db_path: Path, tz, *, last_days: int = 7) -> str:
+    window_days = max(int(last_days), 1)
+    today = today_string(tz)
+    generated_at = datetime.now(tz).replace(microsecond=0).isoformat()
+    timezone_name = getattr(tz, "key", None) or str(tz)
+    ledger_row = conn.execute(
+        """
+        SELECT
+            COUNT(*) AS usage_records,
+            MAX(started_at) AS latest_record
+        FROM usage_records
+        """
+    ).fetchone()
+    launchd_status = _detect_launchd_status()
+
+    payload = {
+        "schema_version": 1,
+        "generated_at": generated_at,
+        "timezone": timezone_name,
+        "ledger": {
+            "app_home": str(resolve_app_home()),
+            "db_path": str(db_path),
+            "db_exists": db_path.exists(),
+            "usage_records": int(ledger_row["usage_records"] or 0),
+            "latest_record": ledger_row["latest_record"],
+        },
+        "automation": {
+            "launchd_installed": bool(launchd_status["tokkit_labels"]),
+            "tokkit_labels": launchd_status["tokkit_labels"],
+            "legacy_tokstat_labels": launchd_status["legacy_tokstat_labels"],
+        },
+        "today": json.loads(render_daily_report(conn, today, json_mode=True, tz=tz)),
+        "range": json.loads(render_range_report(conn, window_days, tz, json_mode=True)),
+        "budget": json.loads(render_budget_report(conn, tz, json_mode=True)),
+        "clients": json.loads(render_clients_report(conn, tz, target_date=None, last_days=window_days, json_mode=True)),
+        "commands": {
+            "snapshot": ["tok", "snapshot", "--json"],
+            "refresh": ["tok", "scan", "all"],
+            "open_html": ["tok", "html", "last", str(window_days), "open"],
+        },
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 def render_clients_report(
