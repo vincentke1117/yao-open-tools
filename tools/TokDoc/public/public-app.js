@@ -1,9 +1,15 @@
 const typeLabels = {
   all: '全部',
   html: 'HTML',
+  markdown: 'Markdown',
   pdf: 'PDF',
   word: 'Word',
+  presentation: '演示',
+  keynote: 'Keynote',
+  spreadsheet: '表格',
 };
+
+const publicTypes = ['all', 'html', 'markdown', 'pdf', 'word', 'presentation', 'keynote', 'spreadsheet'];
 
 const publicSorts = new Set(['updated_desc', 'created_desc']);
 
@@ -19,7 +25,7 @@ const state = {
   page: Number(new URLSearchParams(window.location.search).get('page') || 1),
   pageSize: 10,
   pages: [],
-  stats: { all: 0, html: 0, pdf: 0, word: 0 },
+  stats: { all: 0, html: 0, markdown: 0, pdf: 0, word: 0, presentation: 0, keynote: 0, spreadsheet: 0 },
   pagination: {
     page: 1,
     pageSize: 10,
@@ -44,7 +50,7 @@ const els = {
 let searchTimer = null;
 
 function typeFromPath() {
-  const match = window.location.pathname.match(/^\/type\/(html|pdf|word)\/?$/);
+  const match = window.location.pathname.match(/^\/type\/(html|markdown|pdf|word|presentation|keynote|spreadsheet)\/?$/);
   return match ? match[1] : 'all';
 }
 
@@ -66,7 +72,11 @@ function formatSize(bytes) {
 
 function fileTypeClass(type) {
   if (type === 'pdf') return 'type-pdf';
+  if (type === 'markdown') return 'type-markdown';
   if (type === 'word') return 'type-word';
+  if (type === 'presentation') return 'type-presentation';
+  if (type === 'keynote') return 'type-keynote';
+  if (type === 'spreadsheet') return 'type-spreadsheet';
   return 'type-html';
 }
 
@@ -116,12 +126,8 @@ function updateUrl() {
 
 function renderStats() {
   const stats = state.stats || {};
-  els.statsLine.innerHTML = [
-    ['全部', stats.all || 0],
-    ['HTML', stats.html || 0],
-    ['PDF', stats.pdf || 0],
-    ['Word', stats.word || 0],
-  ]
+  els.statsLine.innerHTML = publicTypes
+    .map((type) => [typeLabels[type], stats[type] || 0])
     .map(([label, value]) => `<span>${label} <strong>${Number(value) || 0}</strong></span>`)
     .join('');
 }

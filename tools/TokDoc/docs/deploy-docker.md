@@ -6,7 +6,7 @@ TokDoc 支持用 Docker Compose 一键部署。推荐线上服务器只把容器
 
 - Docker Engine 24+ 或宝塔面板内置 Docker。
 - Docker Compose v2。
-- 至少 1 CPU、1 GB 内存。Word 转 PDF 会调用 LibreOffice，建议 2 GB 内存以上。
+- 至少 1 CPU、1 GB 内存。Word、PPT、Keynote 和 Excel 转换会调用 LibreOffice，建议 2 GB 内存以上。
 - 至少 2 GB 可用磁盘空间，实际空间取决于上传文档和版本快照数量。
 
 ## 一键启动
@@ -52,6 +52,7 @@ TOKDOC_DATA_VOLUME=./data
 TOKDOC_WATCH_VOLUME=./html-inbox
 TOKDOC_CONTAINER_WATCH_DIRS=/watch/html-inbox
 TOKDOC_ALLOW_SOURCE_WRITE=false
+TOKDOC_UPLOAD_MAX_MB=200
 TOKDOC_ADMIN_PATH=
 TOKDOC_INITIAL_USERNAME=admin
 TOKDOC_INITIAL_PASSWORD=tokdoc
@@ -66,6 +67,7 @@ TOKDOC_CONTAINER_NAME=tokdoc
 - `TOKDOC_HOST_PORT=18082`：宿主机端口，Nginx 反代到这个端口。
 - `TOKDOC_DATA_VOLUME=./data`：SQLite、上传文件、生成文档、版本快照和回收站，必须持久化和备份。
 - `TOKDOC_WATCH_VOLUME=./html-inbox`：宿主机监听目录，挂载到容器内 `/watch/html-inbox`。
+- `TOKDOC_UPLOAD_MAX_MB=200`：TokDoc 单个上传文件大小上限，PPTX、PDF 或 Office 文件较大时可以调高。
 - `TOKDOC_INITIAL_USERNAME/PASSWORD`：只在空数据库首次初始化时生效，已有数据库里的账号密码不会被覆盖。
 - `TOKDOC_ADMIN_PATH`：临时覆盖后台目录，忘记后台地址时可设置为 `/admin` 后重启容器。
 - `TOKDOC_NODE_IMAGE`：构建镜像用的 Node 基础镜像，默认使用稳定 Debian LTS。只有在服务器有企业镜像缓存或 Docker Hub 拉取慢时才需要改。
@@ -110,7 +112,7 @@ location / {
 }
 ```
 
-`client_max_body_size` 要大于你准备上传的 PDF 或 Word 文件大小。
+`client_max_body_size` 要大于你准备上传的 Markdown、PDF、Word、PPT、Keynote 或 Excel 文件大小。
 
 ## 数据目录
 
@@ -142,6 +144,10 @@ versions/
 
 ## 升级
 
+升级的核心原则是只替换代码或镜像，保留原来的 `data/` 持久化目录。不要删除 `data/`，不要把 `.env` 里的 `TOKDOC_DATA_VOLUME` 改到新的空目录，否则新容器会像全新安装一样启动，看不到原来的文档。
+
+TokDoc 启动时只会创建缺失目录、补充 SQLite 新字段和读取已有设置；不会重建数据库，也不会覆盖已有账号、上传源文件、生成页面、回收站或版本快照。
+
 源码部署时：
 
 ```bash
@@ -160,6 +166,16 @@ docker compose up -d --no-build
 
 ```bash
 tar -czf tokdoc-data-$(date +%Y%m%d-%H%M%S).tar.gz data
+```
+
+确认备份包里至少包含：
+
+```text
+tokdoc.db 或 tokhtml.db
+uploads/
+pages/
+trash/
+versions/
 ```
 
 ## 回滚
@@ -212,10 +228,16 @@ curl http://127.0.0.1:18082/healthz
 
 ### 上传大文件失败
 
-调大 Nginx 或宝塔站点配置：
+先调大 TokDoc 单文件上传上限，例如 `.env`：
+
+```dotenv
+TOKDOC_UPLOAD_MAX_MB=500
+```
+
+然后调大 Nginx 或宝塔站点配置，反代限制需要不小于 TokDoc 上传上限：
 
 ```nginx
-client_max_body_size 200m;
+client_max_body_size 500m;
 ```
 
 ### 忘记后台地址

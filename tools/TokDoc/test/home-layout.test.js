@@ -53,20 +53,37 @@ test('keeps the page list full width and moves watch directories into settings',
   assert.match(html, /回收站/);
 });
 
-test('exposes PDF and Word document upload affordances in the manager UI', async () => {
+test('exposes document upload affordances in the manager UI', async () => {
   const html = await fs.readFile(indexPath, 'utf8');
 
-  assert.match(html, /上传 HTML、PDF 或 Word/);
+  assert.match(html, /上传 HTML、Markdown、PDF、Word、PPT、Keynote 或 Excel/);
   assert.match(html, /选择文件/);
-  assert.match(html, /accept="\.html,\.htm,\.pdf,\.doc,\.docx,text\/html,application\/pdf"/);
+  assert.match(html, /accept="\.html,\.htm,\.md,\.markdown,\.pdf,\.doc,\.docx,\.ppt,\.pptx,\.pptm,\.pps,\.ppsx,\.key,\.xls,\.xlsx,\.xlsm,\.xlsb,text\/html,text\/markdown,text\/x-markdown,application\/pdf"/);
   assert.match(html, /id="uploadBackdrop"/);
   assert.match(html, /id="uploadProgressBar"/);
   assert.match(html, /id="uploadReviewRows"/);
   assert.match(html, /id="confirmUpload"/);
+  assert.match(html, /id="typeTabs"/);
+  assert.match(html, /data-type="html"/);
+  assert.match(html, /data-type="markdown"/);
+  assert.match(html, /data-type="pdf"/);
+  assert.match(html, /data-type="word"/);
+  assert.match(html, /data-type="presentation"/);
+  assert.match(html, /data-type="keynote"/);
+  assert.match(html, /data-type="spreadsheet"/);
+  assert.match(html, /aria-pressed="true" data-type="all"/);
+  assert.doesNotMatch(html, /role="tablist"/);
+  assert.doesNotMatch(html, /role="tab"/);
+  assert.match(html, /\.type-tabs-panel\s*\{/);
+  assert.match(html, /\.type-tabs\s*\{/);
+  assert.match(html, /\.type-tabs button\.is-active\s*\{/);
   assert.match(html, /上传完成后确认名称，确认后写入列表和数据库/);
   assert.match(html, /文档列表/);
   assert.match(html, /<th>类型<\/th>/);
   assert.match(html, /<th>可见性<\/th>/);
+  assert.match(html, /\.col-type\s*\{\s*width:\s*106px;/);
+  assert.match(html, /\.col-time\s*\{\s*width:\s*104px;/);
+  assert.match(html, /\.type-cell\s*\{/);
   assert.match(html, /id="metaFileType"/);
   assert.match(html, /id="metaVisibility"/);
   assert.match(html, /id="editFromPreview"/);
@@ -78,8 +95,12 @@ test('defines a standalone public document index page', async () => {
   assert.match(html, /TokDoc 文档索引/);
   assert.match(html, /id="typeTabs"/);
   assert.match(html, /data-type="html"/);
+  assert.match(html, /data-type="markdown"/);
   assert.match(html, /data-type="pdf"/);
   assert.match(html, /data-type="word"/);
+  assert.match(html, /data-type="presentation"/);
+  assert.match(html, /data-type="keynote"/);
+  assert.match(html, /data-type="spreadsheet"/);
   assert.match(html, /id="searchInput"/);
   assert.match(html, /id="sortSelect"/);
   assert.match(html, /id="docRows"/);
@@ -105,6 +126,7 @@ test('opens public documents in a new tab and defaults public pagination to 10',
 });
 
 test('stages uploads with progress before confirming them into the page list', async () => {
+  const html = await fs.readFile(indexPath, 'utf8');
   const script = await fs.readFile(path.resolve('public/app.js'), 'utf8');
 
   assert.match(script, /XMLHttpRequest/);
@@ -113,5 +135,18 @@ test('stages uploads with progress before confirming them into the page list', a
   assert.match(script, /uploadReviewDocuments/);
   assert.match(script, /data-upload-field="visibility"/);
   assert.match(script, /data-action="visibility"/);
+  assert.match(script, /typeTabs:\s*document\.querySelector\('#typeTabs'\)/);
+  assert.match(script, /function renderTypeTabs\(\)/);
+  assert.match(script, /querySelectorAll\('\[data-type\]'\)/);
+  assert.match(script, /setAttribute\('aria-pressed'/);
+  assert.match(script, /function captureListViewport\(\)/);
+  assert.match(script, /function lockListViewport\(viewport\)/);
+  assert.match(script, /function restoreListViewport\(viewport\)/);
+  assert.match(script, /let loadDataRequestId = 0/);
+  assert.match(script, /const requestId = \+\+loadDataRequestId/);
+  assert.match(script, /if \(requestId !== loadDataRequestId\) return/);
+  assert.match(script, /preserveScroll:\s*true/);
+  assert.match(script, /focus\(\{\s*preventScroll:\s*true\s*\}\)/);
+  assert.match(html, /\.table-wrap\s*\{[\s\S]*?min-height:\s*380px;/);
   assert.match(script, /确认入库/);
 });

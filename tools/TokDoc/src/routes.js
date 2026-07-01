@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { defaultAdminPath, normalizeAdminPath } from './admin-path.js';
 import { injectEditBridge } from './edit-bridge.js';
-import { escapeHtml } from './html.js';
+import { escapeHtml, isEditableFileType, isHtmlBackedFileType, managedFileTypes } from './html.js';
 
 function sendNotFound(reply, message = 'Not found') {
   return reply.code(404).send({ error: message });
@@ -11,7 +11,7 @@ function sendNotFound(reply, message = 'Not found') {
 function publicPage(page) {
   return {
     ...page,
-    canEdit: page.fileType === 'html',
+    canEdit: isEditableFileType(page.fileType, page.mimeType),
     canSync: page.fileType === 'html',
     canEditSource: page.sourceType === 'watch',
   };
@@ -207,10 +207,10 @@ async function sendGeneratedPage(app, request, reply, rawSlug) {
   const session = currentSession(app, request);
   if (page.visibility === 'private' && !session) return sendNotFound(reply, 'Page not found');
   app.store.incrementAccessCount(page.id);
-  if (request.query?.edit === '1' && page.fileType !== 'html') {
+  if (request.query?.edit === '1' && !isEditableFileType(page.fileType, page.mimeType)) {
     return reply.code(400).send({ error: 'Document assets cannot be edited online' });
   }
-  if (page.fileType !== 'html') {
+  if (!isHtmlBackedFileType(page.fileType, page.mimeType)) {
     const buffer = await app.store.readPageFile(page);
     return reply
       .header('cache-control', 'no-store')
@@ -219,7 +219,7 @@ async function sendGeneratedPage(app, request, reply, rawSlug) {
       .send(buffer);
   }
   const html = await app.store.readPageHtml(page);
-  const output = request.query?.edit === '1' ? injectEditBridge(page, html, app.store.getAdminPath()) : html;
+  const output = request.query?.edit === '1' && isEditableFileType(page.fileType, page.mimeType) ? injectEditBridge(page, html, app.store.getAdminPath()) : html;
   return reply.header('cache-control', 'no-store').type('text/html; charset=utf-8').send(output);
 }
 
@@ -259,7 +259,7 @@ async function sendPublicIndex(app, reply) {
       `${metaTag('description', seoDescription)}${metaTag('keywords', seoKeywords)}  </head>`,
     )
     .replace(/(<span class="brand-title">)[\s\S]*?(<\/span>)/, `$1${escapeHtml(siteName)}$2`)
-    .replace(/(<span class="brand-subtitle">)[\s\S]*?(<\/span>)/, `$1${escapeHtml(seoDescription || '公开文档索引 · HTML / PDF / Word')}$2`)
+    .replace(/(<span class="brand-subtitle">)[\s\S]*?(<\/span>)/, `$1${escapeHtml(seoDescription || '公开文档索引 · HTML / Markdown / PDF / Word / PPT / Keynote / Excel')}$2`)
     .replace(/(<h1 class="section-title">)[\s\S]*?(<\/h1>)/, `$1${escapeHtml(siteName)}$2`)
     .replace(/(<p class="section-note" id="listNote">)[\s\S]*?(<\/p>)/, `$1${escapeHtml(seoDescription || '按类型筛选、搜索并打开公开文档。')}$2`);
   return reply.type('text/html').send(html);
@@ -267,7 +267,11 @@ async function sendPublicIndex(app, reply) {
 
 function normalizedPublicType(value) {
   const type = String(value || 'all').trim().toLowerCase();
-  return ['html', 'pdf', 'word'].includes(type) ? type : 'all';
+  return managedFileTypes.includes(type) ? type : 'all';
+}
+
+function isDocumentConversionError(error) {
+  return error.code === 'DOCUMENT_CONVERSION_FAILED' || error.code === 'WORD_CONVERSION_FAILED';
 }
 
 function registerApiRoutes(app, prefix = '') {
@@ -310,7 +314,7 @@ function registerApiRoutes(app, prefix = '') {
   app.get(`${prefix}/api/pages/:id`, async (request, reply) => {
     const page = app.store.getPage(request.params.id);
     if (!page) return sendNotFound(reply, 'Page not found');
-    const html = page.fileType === 'html' ? await app.store.readPageHtml(page) : '';
+    const html = isHtmlBackedFileType(page.fileType, page.mimeType) ? await app.store.readPageHtml(page) : '';
     return { page: publicPage(page), html };
   });
 
@@ -320,7 +324,7 @@ function registerApiRoutes(app, prefix = '') {
     try {
       created = await app.store.importUploadFiles(files);
     } catch (error) {
-      if (error.code === 'WORD_CONVERSION_FAILED') return reply.code(422).send({ error: error.message });
+      if (isDocumentConversionError(error)) return reply.code(422).send({ error: error.message });
       throw error;
     }
     if (!created.length) return reply.code(400).send({ error: 'No supported files uploaded' });
@@ -340,7 +344,7 @@ function registerApiRoutes(app, prefix = '') {
       created = await app.store.confirmStagedUpload(request.params.uploadId, request.body || {});
     } catch (error) {
       if (error.message === 'Upload batch not found') return reply.code(404).send({ error: error.message });
-      if (error.code === 'WORD_CONVERSION_FAILED') return reply.code(422).send({ error: error.message });
+      if (isDocumentConversionError(error)) return reply.code(422).send({ error: error.message });
       throw error;
     }
     if (!created.length) return reply.code(400).send({ error: 'No supported files uploaded' });
@@ -516,7 +520,7 @@ export function registerRoutes(app) {
     time: new Date().toISOString(),
   }));
   app.get('/type/:fileType', async (request, reply) => {
-    if (!['html', 'pdf', 'word'].includes(String(request.params.fileType || '').toLowerCase())) {
+    if (!managedFileTypes.includes(String(request.params.fileType || '').toLowerCase())) {
       return sendNotFound(reply, 'Type not found');
     }
     return sendPublicIndex(app, reply);

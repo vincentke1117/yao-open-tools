@@ -46,8 +46,17 @@ function hasValidSession(store, cookieHeader = '') {
   );
 }
 
+function formatBytes(bytes) {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value <= 0) return '200 MB';
+  const mb = value / 1024 / 1024;
+  if (mb >= 1) return `${Math.round(mb)} MB`;
+  return `${Math.round(value / 1024)} KB`;
+}
+
 export async function buildApp(config = loadConfig()) {
   const app = Fastify({ logger: true });
+  const uploadMaxBytes = config.uploadMaxBytes || 200 * 1024 * 1024;
   const db = createDb(config);
   const store = new PageStore(config, db);
   await store.ensureStorage();
@@ -66,9 +75,16 @@ export async function buildApp(config = loadConfig()) {
     return reply.code(404).send({ error: 'Page asset not found' });
   });
 
+  app.setErrorHandler((error, request, reply) => {
+    if (error?.code === 'FST_REQ_FILE_TOO_LARGE' || error?.statusCode === 413) {
+      return reply.code(413).send({ error: `上传文件过大，单个文件不能超过 ${formatBytes(uploadMaxBytes)}` });
+    }
+    return reply.send(error);
+  });
+
   await app.register(multipart, {
     limits: {
-      fileSize: 20 * 1024 * 1024,
+      fileSize: uploadMaxBytes,
       files: 200,
     },
   });

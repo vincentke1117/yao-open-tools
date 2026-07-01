@@ -1,6 +1,13 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { parseHTML } from 'linkedom';
+import MarkdownIt from 'markdown-it';
+
+const markdownRenderer = new MarkdownIt({
+  html: false,
+  linkify: true,
+  typographer: false,
+});
 
 export function checksum(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -45,6 +52,10 @@ export function isHtmlFile(filePath) {
   return /\.html?$/i.test(filePath);
 }
 
+export function isMarkdownFile(filePath) {
+  return /\.(md|markdown)$/i.test(filePath);
+}
+
 export function isPdfFile(filePath) {
   return /\.pdf$/i.test(filePath);
 }
@@ -53,10 +64,30 @@ export function isWordFile(filePath) {
   return /\.(doc|docx)$/i.test(filePath);
 }
 
+export function isPresentationFile(filePath) {
+  return /\.(ppt|pptx|pptm|pps|ppsx)$/i.test(filePath);
+}
+
+export function isKeynoteFile(filePath) {
+  return /\.key$/i.test(filePath);
+}
+
+export function isSpreadsheetFile(filePath) {
+  return /\.(xls|xlsx|xlsm|xlsb)$/i.test(filePath);
+}
+
+export const managedFileTypes = ['html', 'markdown', 'pdf', 'word', 'presentation', 'keynote', 'spreadsheet'];
+export const htmlBackedFileTypes = ['html', 'markdown', 'spreadsheet', 'word'];
+export const editableFileTypes = ['html', 'markdown', 'word'];
+
 export function managedFileType(filePath) {
   if (isHtmlFile(filePath)) return 'html';
+  if (isMarkdownFile(filePath)) return 'markdown';
   if (isPdfFile(filePath)) return 'pdf';
   if (isWordFile(filePath)) return 'word';
+  if (isPresentationFile(filePath)) return 'presentation';
+  if (isKeynoteFile(filePath)) return 'keynote';
+  if (isSpreadsheetFile(filePath)) return 'spreadsheet';
   return '';
 }
 
@@ -66,8 +97,25 @@ export function isManagedFile(filePath) {
 
 export function generatedMimeType(fileType) {
   if (fileType === 'html') return 'text/html; charset=utf-8';
-  if (fileType === 'pdf' || fileType === 'word') return 'application/pdf';
+  if (fileType === 'markdown') return 'text/html; charset=utf-8';
+  if (fileType === 'word') return 'text/html; charset=utf-8';
+  if (fileType === 'spreadsheet') return 'text/html; charset=utf-8';
+  if (managedFileTypes.includes(fileType)) return 'application/pdf';
   return 'application/octet-stream';
+}
+
+export function isHtmlBackedFileType(fileType, mimeType = '') {
+  const type = String(fileType || '').toLowerCase();
+  if (type === 'html' || type === 'markdown' || type === 'spreadsheet') return true;
+  if (type === 'word') return !mimeType || /^text\/html\b/i.test(String(mimeType || ''));
+  return false;
+}
+
+export function isEditableFileType(fileType, mimeType = '') {
+  const type = String(fileType || '').toLowerCase();
+  if (type === 'html' || type === 'markdown') return true;
+  if (type === 'word') return isHtmlBackedFileType(type, mimeType);
+  return false;
 }
 
 export function basenameWithoutExtension(fileName = 'page') {
@@ -76,6 +124,13 @@ export function basenameWithoutExtension(fileName = 'page') {
 
 export function documentTitleFromFileName(fileName = 'page') {
   return basenameWithoutExtension(fileName).trim() || '未命名文档';
+}
+
+export function parseMarkdownMetadata(markdown, fileName = 'page.md') {
+  const content = String(markdown || '').replace(/^\uFEFF/, '');
+  const heading = content.match(/^\s{0,3}#\s+(.+?)\s*#*\s*$/m);
+  const title = heading?.[1]?.trim() || documentTitleFromFileName(fileName);
+  return { title };
 }
 
 export function parentDirectoryNameFromRelative(relativePath) {
@@ -147,6 +202,33 @@ export function composeDocument(title, body) {
     '</body>',
     '</html>',
   ].join('');
+}
+
+export function composeMarkdownDocument(title, body) {
+  return [
+    '<!doctype html>',
+    '<html lang="zh-CN">',
+    '<head>',
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width,initial-scale=1">',
+    `<title>${escapeHtml(title)}</title>`,
+    '<style>',
+    ':root{color-scheme:light}body{max-width:900px;margin:48px auto;padding:0 24px 72px;color:#3f3f3b;background:#f7f6ef;font-family:-apple-system,BlinkMacSystemFont,"Source Han Sans SC","PingFang SC",sans-serif;line-height:1.72}main{background:#fffefa;border:1px solid #e7e1d4;border-radius:8px;padding:44px 52px;box-shadow:0 18px 44px rgba(41,34,20,.06)}h1,h2,h3,h4{color:#141413;font-family:"Songti SC","STSong",Georgia,serif;font-weight:500;line-height:1.24;margin:1.4em 0 .55em}h1{font-size:34px;margin-top:0}h2{font-size:26px;border-bottom:1px solid #eee8dc;padding-bottom:10px}h3{font-size:21px}p,ul,ol,blockquote,pre,table{margin:0 0 18px}a{color:#1b365d;text-decoration-thickness:1px;text-underline-offset:3px}img{max-width:100%;height:auto;border-radius:6px}blockquote{padding:12px 18px;border-left:4px solid #1b365d;background:#f6f3eb;color:#55524b}code{font-family:"SFMono-Regular",Consolas,monospace;background:#f0ede4;border:1px solid #e3dccd;border-radius:4px;padding:1px 5px;font-size:.92em}pre{overflow:auto;background:#171717;color:#f7f4ec;border-radius:6px;padding:18px}pre code{background:transparent;border:0;color:inherit;padding:0}table{width:100%;border-collapse:collapse;font-size:15px}th,td{border:1px solid #e5dfd2;padding:10px 12px;text-align:left;vertical-align:top}th{background:#f4f1e8;color:#222}@media (max-width:720px){body{margin:0;padding:16px;background:#fffefa}main{border:0;border-radius:0;box-shadow:none;padding:20px 0}h1{font-size:28px}}',
+    '</style>',
+    '</head>',
+    '<body>',
+    '<main class="tokdoc-markdown">',
+    body || `<h1>${escapeHtml(title)}</h1>`,
+    '</main>',
+    '</body>',
+    '</html>',
+  ].join('');
+}
+
+export function renderMarkdownDocument(markdown, fileName = 'page.md', titleOverride = '') {
+  const title = String(titleOverride || '').trim() || parseMarkdownMetadata(markdown, fileName).title;
+  const body = markdownRenderer.render(String(markdown || '').replace(/^\uFEFF/, ''));
+  return composeMarkdownDocument(title, body);
 }
 
 function insetParts(value) {

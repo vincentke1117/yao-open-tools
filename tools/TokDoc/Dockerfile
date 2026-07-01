@@ -4,7 +4,7 @@ FROM ${NODE_IMAGE}
 WORKDIR /app
 
 RUN apt-get update \
-  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libreoffice-writer fonts-noto-cjk fontconfig \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libreoffice-writer libreoffice-impress libreoffice-calc fonts-noto-cjk fonts-liberation fontconfig \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./

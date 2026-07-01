@@ -26,13 +26,25 @@ const defaultSettings = {
   siteName: 'TokDoc 文档索引',
   adminName: 'TokDoc',
   publicSeoTitle: 'TokDoc 文档索引',
-  publicSeoDescription: '公开文档索引，集中阅读 HTML、PDF 与 Word 文档。',
-  publicSeoKeywords: 'TokDoc,文档索引,HTML,PDF,Word',
+  publicSeoDescription: '公开文档索引，集中阅读 HTML、Markdown、PDF、Word、PPT、Keynote 与 Excel 文档。',
+  publicSeoKeywords: 'TokDoc,文档索引,HTML,Markdown,PDF,Word,PPT,Keynote,Excel',
   publicHomepageEnabled: true,
   remoteSyncEnabled: false,
   remoteSyncUrl: '',
   remoteSyncHasToken: false,
 };
+
+const managedTypeMeta = {
+  html: { label: 'HTML', badge: 'badge-success' },
+  markdown: { label: 'Markdown', badge: 'badge-slate' },
+  pdf: { label: 'PDF', badge: 'badge-warning' },
+  word: { label: 'Word', badge: 'badge-violet' },
+  presentation: { label: '演示', badge: 'badge-blue' },
+  keynote: { label: 'Keynote', badge: 'badge-indigo' },
+  spreadsheet: { label: '表格', badge: 'badge-teal' },
+};
+
+const supportedFilePattern = /\.(html?|md|markdown|pdf|docx?|pptx?|pptm|ppsx?|key|xlsx?|xlsm|xlsb)$/i;
 
 let settings = { ...defaultSettings };
 const initialPath = normalizedPath(window.location.pathname || defaultSettings.adminPath);
@@ -40,11 +52,13 @@ const isSettingsPage = initialPath.endsWith('/settings');
 let adminBasePath = normalizeAdminPath(isSettingsPage ? initialPath.replace(/\/settings$/u, '') : initialPath);
 let session = { authenticated: false, username: '' };
 let activeFilter = 'all';
+let activeType = 'all';
 let currentPageId = null;
 let toastTimer = null;
 let stagedUpload = null;
 let activeUploadRequest = null;
 let uploadCancelRequested = false;
+let loadDataRequestId = 0;
 let pagination = {
   page: 1,
   pageSize: 20,
@@ -58,8 +72,10 @@ let pagination = {
 const els = {
   rows: document.querySelector('#pageRows'),
   paginationBar: document.querySelector('#paginationBar'),
+  tableWrap: document.querySelector('.table-wrap'),
   watchList: document.querySelector('#watchList'),
   search: document.querySelector('#searchInput'),
+  typeTabs: document.querySelector('#typeTabs'),
   fileInput: document.querySelector('#fileInput'),
   directoryInput: document.querySelector('#directoryInput'),
   dropZone: document.querySelector('#dropZone'),
@@ -214,18 +230,18 @@ function isHtmlPage(page) {
   return fileType(page) === 'html';
 }
 
+function isEditablePage(page) {
+  return Boolean(page?.canEdit || page?.editUrl);
+}
+
 function fileTypeLabel(page) {
   const type = fileType(page);
-  if (type === 'pdf') return 'PDF';
-  if (type === 'word') return 'Word';
-  return 'HTML';
+  return managedTypeMeta[type]?.label || type.toUpperCase();
 }
 
 function fileTypeBadgeClass(page) {
   const type = fileType(page);
-  if (type === 'pdf') return 'badge-warning';
-  if (type === 'word') return 'badge-violet';
-  return 'badge-success';
+  return managedTypeMeta[type]?.badge || 'badge-success';
 }
 
 function fileTypeLabelFromType(type) {
@@ -253,7 +269,7 @@ function pageUrl(page) {
 }
 
 function editUrl(page) {
-  if (!isHtmlPage(page)) return '';
+  if (!isEditablePage(page)) return '';
   return page.editUrl || `${pageUrl(page)}?edit=1`;
 }
 
@@ -261,39 +277,98 @@ function findPage(id) {
   return pages.find((page) => page.id === id);
 }
 
-async function loadData() {
+function scrollingElement() {
+  return document.scrollingElement || document.documentElement;
+}
+
+function captureListViewport() {
+  const tableHeight = els.tableWrap?.getBoundingClientRect().height || 0;
+  return {
+    x: window.scrollX || scrollingElement().scrollLeft || 0,
+    y: window.scrollY || scrollingElement().scrollTop || 0,
+    tableHeight: Math.ceil(tableHeight),
+  };
+}
+
+function lockListViewport(viewport) {
+  if (!viewport || !els.tableWrap || viewport.tableHeight <= 0) return;
+  els.tableWrap.style.minHeight = `${viewport.tableHeight}px`;
+}
+
+function clearListViewportLock() {
+  if (els.tableWrap) els.tableWrap.style.minHeight = '';
+}
+
+function restoreListViewport(viewport) {
+  if (!viewport) return;
+  window.requestAnimationFrame(() => {
+    const scrollRoot = scrollingElement();
+    const lockedMinHeight = els.tableWrap?.style.minHeight || '';
+    const minDocumentHeight = viewport.y + window.innerHeight;
+
+    if (els.tableWrap && lockedMinHeight) {
+      els.tableWrap.style.minHeight = '';
+      if (scrollRoot.scrollHeight < minDocumentHeight) {
+        els.tableWrap.style.minHeight = lockedMinHeight;
+      }
+    }
+
+    window.scrollTo({
+      left: viewport.x,
+      top: Math.min(viewport.y, Math.max(0, scrollRoot.scrollHeight - window.innerHeight)),
+      behavior: 'auto',
+    });
+  });
+}
+
+async function loadData({ preserveScroll = false } = {}) {
   if (!session.authenticated) return;
+  const requestId = ++loadDataRequestId;
+  const viewport = preserveScroll ? captureListViewport() : null;
+  if (viewport) {
+    lockListViewport(viewport);
+  } else {
+    clearListViewportLock();
+  }
   const params = new URLSearchParams({
     page: String(pagination.page),
     pageSize: String(pagination.pageSize),
   });
   const keyword = els.search.value.trim();
   if (keyword) params.set('q', keyword);
+  if (activeType !== 'all') params.set('type', activeType);
   if (activeFilter === 'trash') {
     params.set('scope', 'trash');
   } else if (activeFilter !== 'all') {
     params.set('status', activeFilter);
   }
-  const [pageData, watchData, settingsData] = await Promise.all([
-    api(`/api/pages?${params.toString()}`),
-    api('/api/watch-dirs'),
-    api('/api/settings'),
-  ]);
-  pages = pageData.pages || [];
-  pagination = { ...pagination, ...(pageData.pagination || {}) };
-  watchDirectories = watchData.watchDirs || [];
-  applySettings(settingsData.settings);
-  render();
+  try {
+    const [pageData, watchData, settingsData] = await Promise.all([
+      api(`/api/pages?${params.toString()}`),
+      api('/api/watch-dirs'),
+      api('/api/settings'),
+    ]);
+    if (requestId !== loadDataRequestId) return;
+    pages = pageData.pages || [];
+    pagination = { ...pagination, ...(pageData.pagination || {}) };
+    watchDirectories = watchData.watchDirs || [];
+    applySettings(settingsData.settings);
+    render();
+    restoreListViewport(viewport);
+  } catch (error) {
+    if (requestId === loadDataRequestId) restoreListViewport(viewport);
+    throw error;
+  }
 }
 
-function setPage(nextPage) {
+function setPage(nextPage, options = {}) {
   pagination.page = Math.min(Math.max(Number(nextPage) || 1, 1), pagination.totalPages || 1);
-  return loadData();
+  return loadData(options);
 }
 
-function resetToFirstPage() {
+function resetToFirstPage(options = {}) {
   pagination.page = 1;
-  return loadData();
+  return loadData(options);
 }
 
 function visiblePageNumbers() {
@@ -383,9 +458,19 @@ function renderSettings() {
   if (els.authUserLabel) els.authUserLabel.textContent = session.username ? `已登录：${session.username}` : '未登录';
 }
 
+function renderTypeTabs() {
+  if (!els.typeTabs) return;
+  els.typeTabs.querySelectorAll('[data-type]').forEach((button) => {
+    const isActive = (button.dataset.type || 'all') === activeType;
+    button.classList.toggle('is-active', isActive);
+    button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+}
+
 function render() {
   renderWatchDirectories();
   renderSettings();
+  renderTypeTabs();
   els.rows.innerHTML = pages
     .map((page, index) => {
       const trashed = Boolean(page.deletedAt);
@@ -393,7 +478,7 @@ function render() {
       const statusClass = trashed || missing ? 'badge-warning' : page.edited ? 'badge-violet' : 'badge-success';
       const statusText = trashed ? '回收站' : missing ? '源文件缺失' : page.edited ? '已编辑' : '已生成';
       const nextVisibility = isPrivatePage(page) ? 'public' : 'private';
-      const editButton = isHtmlPage(page)
+      const editButton = isEditablePage(page)
         ? `<button class="btn icon-btn" type="button" title="直接编辑" aria-label="直接编辑" data-action="edit" data-id="${page.id}">${icons.edit}</button>`
         : '';
       const syncButton = isHtmlPage(page)
@@ -401,7 +486,7 @@ function render() {
         : '';
       const rowActions = trashed
         ? `<button class="btn" type="button" title="恢复展示" aria-label="恢复展示" data-action="restore" data-id="${page.id}">${icons.restore} 恢复</button>`
-        : `<button class="btn icon-btn" type="button" title="${isHtmlPage(page) ? '预览' : '阅读'}" aria-label="${isHtmlPage(page) ? '预览' : '阅读'}" data-action="preview" data-id="${page.id}">${icons.eye}</button>
+        : `<button class="btn icon-btn" type="button" title="${isEditablePage(page) ? '预览' : '阅读'}" aria-label="${isEditablePage(page) ? '预览' : '阅读'}" data-action="preview" data-id="${page.id}">${icons.eye}</button>
             ${editButton}
             <button class="btn icon-btn" type="button" title="复制 URL" aria-label="复制 URL" data-action="copy" data-id="${page.id}">${icons.copy}</button>
             <button class="btn icon-btn" type="button" title="新窗口打开" aria-label="新窗口打开" data-action="open" data-id="${page.id}">${icons.external}</button>
@@ -415,7 +500,7 @@ function render() {
             <span class="title-meta" title="${escapeHtml(page.fileName)}">${escapeHtml(page.fileName)}</span>
           </div>
         </td>
-        <td><span class="badge ${fileTypeBadgeClass(page)}">${fileTypeLabel(page)}</span></td>
+        <td class="type-cell"><span class="badge ${fileTypeBadgeClass(page)}">${fileTypeLabel(page)}</span></td>
         <td class="time-cell">${escapeHtml(page.uploadTime || page.updatedTime || '-')}</td>
         <td><span class="size-cell">${escapeHtml(formatSize(page.size))}</span></td>
         <td><span class="directory-cell" title="${escapeHtml(page.directoryName || '无目录')}">${escapeHtml(page.directoryName || '-')}</span></td>
@@ -444,7 +529,7 @@ function render() {
 
   renderPagination();
   document.querySelector('#metricPages').textContent = pagination.total;
-  document.querySelector('#metricEditable').textContent = pages.filter((page) => isHtmlPage(page) && page.status !== 'missing').length;
+  document.querySelector('#metricEditable').textContent = pages.filter((page) => isEditablePage(page) && page.status !== 'missing').length;
   document.querySelector('#metricToday').textContent = pagination.total;
 }
 
@@ -504,13 +589,11 @@ function resetUploadDialog() {
 
 function uploadSummary(upload) {
   const documents = upload.documents || [];
-  const htmlCount = documents.filter((item) => item.fileType === 'html').length;
-  const pdfCount = documents.filter((item) => item.fileType === 'pdf').length;
-  const wordCount = documents.filter((item) => item.fileType === 'word').length;
   return [
-    htmlCount ? `${htmlCount} 个 HTML` : '',
-    pdfCount ? `${pdfCount} 个 PDF` : '',
-    wordCount ? `${wordCount} 个 Word` : '',
+    ...Object.entries(managedTypeMeta).map(([type, meta]) => {
+      const count = documents.filter((item) => item.fileType === type).length;
+      return count ? `${count} 个 ${meta.label}` : '';
+    }),
     upload.assetCount ? `${upload.assetCount} 个附件` : '',
   ]
     .filter(Boolean)
@@ -618,14 +701,10 @@ function uploadWithProgress(form) {
 async function uploadFiles(files) {
   const fileList = Array.from(files || []);
   const hasDirectoryContext = fileList.some((file) => file.webkitRelativePath);
-  const supportedPattern = /\.(html?|pdf|docx?)$/i;
-  const uploadableFiles = hasDirectoryContext ? fileList : fileList.filter((file) => supportedPattern.test(file.name));
-  const supportedFiles = uploadableFiles.filter((file) => supportedPattern.test(file.webkitRelativePath || file.name));
-  const htmlCount = supportedFiles.filter((file) => /\.html?$/i.test(file.webkitRelativePath || file.name)).length;
-  const pdfCount = supportedFiles.filter((file) => /\.pdf$/i.test(file.webkitRelativePath || file.name)).length;
-  const wordCount = supportedFiles.filter((file) => /\.(doc|docx)$/i.test(file.webkitRelativePath || file.name)).length;
+  const uploadableFiles = hasDirectoryContext ? fileList : fileList.filter((file) => supportedFilePattern.test(file.name));
+  const supportedFiles = uploadableFiles.filter((file) => supportedFilePattern.test(file.webkitRelativePath || file.name));
   if (!supportedFiles.length) {
-    showToast('没有检测到 HTML、PDF 或 Word 文件');
+    showToast('没有检测到 HTML、Markdown、PDF、Word、PPT、Keynote 或 Excel 文件');
     return;
   }
   uploadCancelRequested = false;
@@ -647,7 +726,7 @@ async function uploadFiles(files) {
     stagedUpload = result;
     setUploadProgress({
       text: '上传解析完成',
-      detail: uploadSummary(result) || `${htmlCount + pdfCount + wordCount} 个文档待确认`,
+      detail: uploadSummary(result) || `${supportedFiles.length} 个文档待确认`,
       badge: '待确认',
       percent: 100,
     });
@@ -681,7 +760,7 @@ async function confirmUploadDialog() {
   setUploadActions({ confirmDisabled: true, cancelDisabled: true, confirmText: '生成中' });
   setUploadProgress({
     text: '正在生成 URL',
-    detail: '写入 pages 目录和数据库，Word 文档会同步转换为 PDF',
+    detail: '写入 pages 目录和数据库，Markdown、Word 和 Excel 会生成阅读页，PPT 与 Keynote 文档会同步转换为 PDF',
     badge: '生成中',
     percent: 0,
     indeterminate: true,
@@ -728,8 +807,8 @@ function openPreview(id) {
   document.querySelector('#metaVisibility').textContent = isPrivatePage(page) ? '仅自己可见' : '公开';
   document.querySelector('#metaUploadTime').textContent = page.uploadTime || page.updatedTime || '-';
   document.querySelector('#metaUrl').textContent = pageUrl(page);
-  document.querySelector('#editFromPreview').hidden = !isHtmlPage(page);
-  els.previewFrame.title = isHtmlPage(page) ? 'HTML 页面预览' : '文档阅读器';
+  document.querySelector('#editFromPreview').hidden = !isEditablePage(page);
+  els.previewFrame.title = isEditablePage(page) ? '可编辑文档预览' : '文档阅读器';
   els.previewFrame.removeAttribute('srcdoc');
   els.previewFrame.src = pageUrl(page);
   openLayer(els.previewBackdrop);
@@ -740,7 +819,7 @@ function openEditor(id) {
   if (!page) return;
   const url = editUrl(page);
   if (!url) {
-    showToast('PDF 和 Word 文档暂不支持在线编辑');
+    showToast('只有 HTML、Markdown 和 Word 页面支持在线编辑');
     return;
   }
   window.open(url, '_blank', 'noopener,noreferrer');
@@ -957,7 +1036,34 @@ els.directoryInput.addEventListener('change', (event) => {
   uploadFiles(event.target.files).catch((error) => showToast(error.message));
   event.target.value = '';
 });
-els.search.addEventListener('input', () => resetToFirstPage().catch((error) => showToast(error.message)));
+els.search.addEventListener('input', () => resetToFirstPage({ preserveScroll: true }).catch((error) => showToast(error.message)));
+
+if (els.typeTabs) {
+  els.typeTabs.querySelectorAll('[data-type]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (activeType === (button.dataset.type || 'all')) return;
+      activeType = button.dataset.type || 'all';
+      renderTypeTabs();
+      resetToFirstPage({ preserveScroll: true }).catch((error) => showToast(error.message));
+    });
+  });
+}
+
+if (els.typeTabs) {
+  els.typeTabs.addEventListener('keydown', (event) => {
+    const current = event.target.closest('[data-type]');
+    if (!current || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    const buttons = Array.from(els.typeTabs.querySelectorAll('[data-type]'));
+    const currentIndex = buttons.indexOf(current);
+    const offset = event.key === 'ArrowRight' ? 1 : -1;
+    const next = buttons[(currentIndex + offset + buttons.length) % buttons.length];
+    next.focus({ preventScroll: true });
+    activeType = next.dataset.type || 'all';
+    renderTypeTabs();
+    resetToFirstPage({ preserveScroll: true }).catch((error) => showToast(error.message));
+  });
+}
 
 els.dropZone.addEventListener('dragover', (event) => {
   event.preventDefault();
@@ -972,10 +1078,11 @@ els.dropZone.addEventListener('drop', (event) => {
 
 document.querySelectorAll('[data-filter]').forEach((button) => {
   button.addEventListener('click', () => {
+    if (activeFilter === button.dataset.filter) return;
     document.querySelectorAll('[data-filter]').forEach((item) => item.classList.remove('is-active'));
     button.classList.add('is-active');
     activeFilter = button.dataset.filter;
-    resetToFirstPage().catch((error) => showToast(error.message));
+    resetToFirstPage({ preserveScroll: true }).catch((error) => showToast(error.message));
   });
 });
 

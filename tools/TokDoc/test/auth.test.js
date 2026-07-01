@@ -36,6 +36,16 @@ function legacySessionCookie(response) {
   return sessionCookie(response).replace(/^tokdoc_session=/, 'tokhtml_session=');
 }
 
+function multipartPayload({ boundary, fieldName = 'files', fileName = 'deck.pptx', content = Buffer.alloc(0) }) {
+  return Buffer.concat([
+    Buffer.from(`--${boundary}\r\n`),
+    Buffer.from(`Content-Disposition: form-data; name="${fieldName}"; filename="${fileName}"\r\n`),
+    Buffer.from('Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation\r\n\r\n'),
+    Buffer.from(content),
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
+}
+
 test('requires login for management APIs and keeps a long-lived session cookie', async (t) => {
   const { app, dataDir } = await createApp();
   t.after(async () => {
@@ -93,6 +103,33 @@ test('requires login for management APIs and keeps a long-lived session cookie',
   const logoutCookies = String(logout.headers['set-cookie']);
   assert.match(logoutCookies, /tokdoc_session=.*Max-Age=0/);
   assert.match(logoutCookies, /tokhtml_session=.*Max-Age=0/);
+});
+
+test('returns a clear error when uploaded files exceed the configured size limit', async (t) => {
+  const { app, dataDir } = await createApp({ uploadMaxBytes: 1024 });
+  t.after(async () => {
+    await app.close();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  const login = await app.inject({
+    method: 'POST',
+    url: '/api/login',
+    payload: { username: 'admin', password: 'tokdoc' },
+  });
+  const boundary = 'tokdoc-upload-limit';
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/pages/upload/prepare',
+    headers: {
+      cookie: sessionCookie(login),
+      'content-type': `multipart/form-data; boundary=${boundary}`,
+    },
+    payload: multipartPayload({ boundary, content: Buffer.alloc(2048, 'a') }),
+  });
+
+  assert.equal(response.statusCode, 413);
+  assert.equal(response.json().error, '上传文件过大，单个文件不能超过 1 KB');
 });
 
 test('uses initial login credentials for a fresh database without overriding existing settings', async (t) => {
@@ -259,6 +296,26 @@ test('serves a public document index and filters public API fields without login
     await app.close();
     await fs.rm(dataDir, { recursive: true, force: true });
   });
+  const fakeOffice = path.join(dataDir, 'fake-soffice.mjs');
+  await fs.writeFile(
+    fakeOffice,
+    [
+      '#!/usr/bin/env node',
+      'import fs from "node:fs";',
+      'import path from "node:path";',
+      'const outdir = process.argv[process.argv.indexOf("--outdir") + 1];',
+      'const convertTo = process.argv[process.argv.indexOf("--convert-to") + 1];',
+      'const source = process.argv.at(-1);',
+      'fs.mkdirSync(outdir, { recursive: true });',
+      'if (convertTo === "html") {',
+      '  fs.writeFileSync(path.join(outdir, path.basename(source).replace(/\\.[^.]+$/, ".html")), "<!doctype html><html><body><table><tr><td>预算表</td><td>200</td></tr></table></body></html>");',
+      '} else {',
+      '  fs.writeFileSync(path.join(outdir, path.basename(source).replace(/\\.[^.]+$/, ".pdf")), `%PDF-1.4\\nconverted:${path.basename(source)}\\n`);',
+      '}',
+    ].join('\n'),
+  );
+  await fs.chmod(fakeOffice, 0o755);
+  app.store.config.officeConverterBin = fakeOffice;
 
   const htmlPage = await app.store.importBuffer({
     fileName: 'public-index-html.html',
@@ -269,6 +326,26 @@ test('serves a public document index and filters public API fields without login
     fileName: 'public-index-pdf.pdf',
     relativePath: 'pdf/public-index-pdf.pdf',
     buffer: Buffer.from('%PDF-1.4\npublic index pdf\n'),
+  });
+  const markdownPage = await app.store.importBuffer({
+    fileName: 'public-index-notes.md',
+    relativePath: 'notes/public-index-notes.md',
+    buffer: Buffer.from('# 公开索引 Markdown\n\nMarkdown 内容。'),
+  });
+  const wordPage = await app.store.importBuffer({
+    fileName: 'public-index-brief.docx',
+    relativePath: 'docs/public-index-brief.docx',
+    buffer: Buffer.from('docx bytes'),
+  });
+  const spreadsheetPage = await app.store.importBuffer({
+    fileName: 'public-index-budget.xlsx',
+    relativePath: 'sheets/public-index-budget.xlsx',
+    buffer: Buffer.from('xlsx bytes'),
+  });
+  const presentationPage = await app.store.importBuffer({
+    fileName: 'public-index-deck.pptx',
+    relativePath: 'slides/public-index-deck.pptx',
+    buffer: Buffer.from('pptx bytes'),
   });
   const privatePage = await app.store.importBuffer({
     fileName: 'private-index-html.html',
@@ -291,14 +368,22 @@ test('serves a public document index and filters public API fields without login
   const typePage = await app.inject({ method: 'GET', url: '/type/html' });
   assert.equal(typePage.statusCode, 200);
   assert.match(typePage.body, /TokDoc 文档索引/);
+  const markdownTypePage = await app.inject({ method: 'GET', url: '/type/markdown' });
+  assert.equal(markdownTypePage.statusCode, 200);
+  const presentationTypePage = await app.inject({ method: 'GET', url: '/type/presentation' });
+  assert.equal(presentationTypePage.statusCode, 200);
 
   const publicApi = await app.inject({ method: 'GET', url: '/public/api/pages' });
   assert.equal(publicApi.statusCode, 200);
   const body = publicApi.json();
-  assert.equal(body.pagination.total, 2);
-  assert.deepEqual(body.stats, { all: 2, html: 1, pdf: 1, word: 0 });
+  assert.equal(body.pagination.total, 6);
+  assert.deepEqual(body.stats, { all: 6, html: 1, markdown: 1, pdf: 1, word: 1, presentation: 1, keynote: 0, spreadsheet: 1 });
   assert.equal(body.pages.some((page) => page.slug === htmlPage.slug), true);
+  assert.equal(body.pages.some((page) => page.slug === markdownPage.slug), true);
+  assert.equal(body.pages.some((page) => page.slug === wordPage.slug), true);
+  assert.equal(body.pages.some((page) => page.slug === spreadsheetPage.slug), true);
   assert.equal(body.pages.some((page) => page.slug === pdfPage.slug), true);
+  assert.equal(body.pages.some((page) => page.slug === presentationPage.slug), true);
   assert.equal(body.pages.some((page) => page.slug === privatePage.slug), false);
   assert.equal(body.pages.some((page) => page.slug === trashPage.slug), false);
   assert.equal(Object.hasOwn(body.pages[0], 'id'), false);
@@ -313,6 +398,61 @@ test('serves a public document index and filters public API fields without login
   assert.equal(htmlApi.statusCode, 200);
   assert.equal(htmlApi.json().pages.length, 1);
   assert.equal(htmlApi.json().pages[0].fileType, 'html');
+
+  const markdownApi = await app.inject({ method: 'GET', url: '/public/api/pages?type=markdown' });
+  assert.equal(markdownApi.statusCode, 200);
+  assert.equal(markdownApi.json().pages.length, 1);
+  assert.equal(markdownApi.json().pages[0].fileType, 'markdown');
+
+  const wordApi = await app.inject({ method: 'GET', url: '/public/api/pages?type=word' });
+  assert.equal(wordApi.statusCode, 200);
+  assert.equal(wordApi.json().pages.length, 1);
+  assert.equal(wordApi.json().pages[0].fileType, 'word');
+
+  const presentationApi = await app.inject({ method: 'GET', url: '/public/api/pages?type=presentation' });
+  assert.equal(presentationApi.statusCode, 200);
+  assert.equal(presentationApi.json().pages.length, 1);
+  assert.equal(presentationApi.json().pages[0].fileType, 'presentation');
+
+  const spreadsheetApi = await app.inject({ method: 'GET', url: '/public/api/pages?type=spreadsheet' });
+  assert.equal(spreadsheetApi.statusCode, 200);
+  assert.equal(spreadsheetApi.json().pages.length, 1);
+  assert.equal(spreadsheetApi.json().pages[0].fileType, 'spreadsheet');
+
+  const presentationView = await app.inject({ method: 'GET', url: presentationPage.url });
+  assert.equal(presentationView.statusCode, 200);
+  assert.match(presentationView.headers['content-type'], /application\/pdf/);
+  assert.match(presentationView.body, /converted:public-index-deck\.pptx/);
+
+  const markdownView = await app.inject({ method: 'GET', url: markdownPage.url });
+  assert.equal(markdownView.statusCode, 200);
+  assert.match(markdownView.headers['content-type'], /text\/html/);
+  assert.match(markdownView.body, /<h1>公开索引 Markdown<\/h1>/);
+
+  const wordView = await app.inject({ method: 'GET', url: wordPage.url });
+  assert.equal(wordView.statusCode, 200);
+  assert.match(wordView.headers['content-type'], /text\/html/);
+  assert.match(wordView.body, /class="tokdoc-word-shell"/);
+
+  const spreadsheetView = await app.inject({ method: 'GET', url: spreadsheetPage.url });
+  assert.equal(spreadsheetView.statusCode, 200);
+  assert.match(spreadsheetView.headers['content-type'], /text\/html/);
+  assert.match(spreadsheetView.body, /class="sheet-app"/);
+  assert.match(spreadsheetView.body, /预算表/);
+
+  const login = await app.inject({
+    method: 'POST',
+    url: '/api/login',
+    payload: { username: 'admin', password: 'tokdoc' },
+  });
+  const presentationEdit = await app.inject({ method: 'GET', url: `${presentationPage.url}?edit=1`, headers: { cookie: sessionCookie(login) } });
+  assert.equal(presentationEdit.statusCode, 400);
+  const markdownEdit = await app.inject({ method: 'GET', url: `${markdownPage.url}?edit=1`, headers: { cookie: sessionCookie(login) } });
+  assert.equal(markdownEdit.statusCode, 200);
+  assert.match(markdownEdit.body, /tokdoc-edit-panel/);
+  const wordEdit = await app.inject({ method: 'GET', url: `${wordPage.url}?edit=1`, headers: { cookie: sessionCookie(login) } });
+  assert.equal(wordEdit.statusCode, 200);
+  assert.match(wordEdit.body, /tokdoc-edit-panel/);
 
   const searched = await app.inject({ method: 'GET', url: '/public/api/pages?q=PDF' });
   assert.equal(searched.statusCode, 200);

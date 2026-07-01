@@ -11,6 +11,12 @@ function boolEnv(value, fallback = false) {
   return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
 }
 
+function positiveNumberEnv(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return fallback;
+  return number;
+}
+
 function splitPaths(value) {
   return String(value || '')
     .split(',')
@@ -68,6 +74,7 @@ export function loadConfig(env = process.env, appRoot = defaultRootDir) {
     watchDirs: splitPaths(envValue(env, 'TOKDOC_WATCH_DIRS', 'TOKHTML_WATCH_DIRS', path.join(rootDir, 'html-inbox'))),
     allowSourceWrite: boolEnv(envValue(env, 'TOKDOC_ALLOW_SOURCE_WRITE', 'TOKHTML_ALLOW_SOURCE_WRITE', ''), false),
     officeConverterBin: envValue(env, 'TOKDOC_SOFFICE_BIN', 'TOKHTML_SOFFICE_BIN', 'soffice'),
+    uploadMaxBytes: Math.round(positiveNumberEnv(envValue(env, 'TOKDOC_UPLOAD_MAX_MB', 'TOKHTML_UPLOAD_MAX_MB', 200), 200) * 1024 * 1024),
     adminPathOverride: env.TOKDOC_ADMIN_PATH ? safeAdminPath(env.TOKDOC_ADMIN_PATH) : '',
     initialAuthUsername: String(env.TOKDOC_INITIAL_USERNAME || '').trim(),
     initialAuthPassword: String(env.TOKDOC_INITIAL_PASSWORD || ''),

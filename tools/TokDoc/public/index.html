@@ -568,11 +568,68 @@
       .filter-panel {
         display: grid;
         grid-template-columns: minmax(260px, 1fr) auto;
-        gap: 14px;
+        gap: 16px;
         align-items: center;
         padding: 16px var(--panel-pad);
         border-bottom: 1px solid var(--line);
         background: #f8f7f1;
+      }
+
+      .type-tabs-panel {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 54px;
+        padding: 10px var(--panel-pad);
+        border-bottom: 1px solid var(--line);
+        background: #fbfaf6;
+      }
+
+      .type-tabs-label {
+        flex: none;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .type-tabs {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+
+      .type-tabs::-webkit-scrollbar {
+        display: none;
+      }
+
+      .type-tabs button {
+        flex: none;
+        height: 30px;
+        padding: 0 10px;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        color: var(--muted);
+        background: transparent;
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+
+      .type-tabs button:hover {
+        color: var(--ink);
+        background: var(--sand);
+      }
+
+      .type-tabs button.is-active {
+        border-color: #d6e1ee;
+        color: var(--accent);
+        background: var(--blue-soft);
+        font-weight: 600;
       }
 
       .filter-search {
@@ -637,6 +694,7 @@
 
       .table-wrap {
         overflow-x: auto;
+        min-height: 380px;
         scrollbar-gutter: stable;
       }
 
@@ -717,15 +775,15 @@
       }
 
       .col-type {
-        width: 68px;
+        width: 106px;
       }
 
       .col-time {
-        width: 78px;
+        width: 104px;
       }
 
       .col-size {
-        width: 68px;
+        width: 82px;
       }
 
       .col-directory {
@@ -786,7 +844,22 @@
         color: var(--ink-soft);
         font-variant-numeric: tabular-nums;
         line-height: 1.2;
-        white-space: normal;
+        text-align: center;
+        white-space: nowrap;
+      }
+
+      .type-cell {
+        text-align: center;
+      }
+
+      .type-cell .badge {
+        justify-content: center;
+        min-width: 58px;
+      }
+
+      .page-table th:nth-child(3),
+      .page-table th:nth-child(4) {
+        text-align: center;
       }
 
       .id-cell {
@@ -910,6 +983,11 @@
         background: var(--green-soft);
       }
 
+      .badge-slate {
+        color: #4b5563;
+        background: #edf0f3;
+      }
+
       .badge-warning {
         color: var(--amber);
         background: var(--amber-soft);
@@ -918,6 +996,21 @@
       .badge-violet {
         color: var(--violet);
         background: var(--violet-soft);
+      }
+
+      .badge-blue {
+        color: var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .badge-indigo {
+        color: #4f46a7;
+        background: #eeedff;
+      }
+
+      .badge-teal {
+        color: #276b5b;
+        background: #e5f5ef;
       }
 
       .visibility-toggle {
@@ -1782,6 +1875,21 @@
           padding: 14px var(--panel-pad);
         }
 
+        .type-tabs-panel {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 8px;
+          padding: 12px var(--panel-pad);
+        }
+
+        .type-tabs {
+          width: 100%;
+        }
+
+        .table-wrap {
+          min-height: 320px;
+        }
+
         .upload-review-row {
           grid-template-columns: 1fr;
         }
@@ -1916,8 +2024,8 @@
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                   </svg>
                 </div>
-                <h1>上传 HTML、PDF 或 Word，生成本地可管理 URL</h1>
-                <p>HTML 支持页面内编辑；PDF 和 Word 会进入阅读器。目录上传仍会同步图片、CSS、JS 等附件，并为 HTML 页面生成可访问的本地资源路径。</p>
+                <h1>上传 HTML、Markdown、PDF、Word、PPT、Keynote 或 Excel，生成本地可管理 URL</h1>
+                <p>HTML、Markdown 和 Word 支持页面内编辑与自动保存；Excel 会生成表格阅读页；PDF、PPT 和 Keynote 会进入阅读器。目录上传仍会同步图片、CSS、JS 等附件，并为 HTML、Markdown 与 Word 页面生成可访问的本地资源路径。</p>
                 <div class="upload-actions">
                   <button class="btn btn-primary" id="pickFiles" type="button">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1943,7 +2051,7 @@
                 </div>
               </div>
             </div>
-            <input id="fileInput" type="file" accept=".html,.htm,.pdf,.doc,.docx,text/html,application/pdf" multiple />
+            <input id="fileInput" type="file" accept=".html,.htm,.md,.markdown,.pdf,.doc,.docx,.ppt,.pptx,.pptm,.pps,.ppsx,.key,.xls,.xlsx,.xlsm,.xlsb,text/html,text/markdown,text/x-markdown,application/pdf" multiple />
             <input id="directoryInput" type="file" webkitdirectory multiple />
           </div>
 
@@ -1983,7 +2091,20 @@
                 </button>
               </div>
             </div>
-            <div class="filter-panel" aria-label="列表筛选">
+            <div class="type-tabs-panel" aria-label="文件类型筛选">
+              <span class="type-tabs-label">类型</span>
+              <div class="type-tabs" id="typeTabs" aria-label="按文件类型筛选">
+                <button class="is-active" type="button" aria-pressed="true" data-type="all">全部类型</button>
+                <button type="button" aria-pressed="false" data-type="html">HTML</button>
+                <button type="button" aria-pressed="false" data-type="markdown">Markdown</button>
+                <button type="button" aria-pressed="false" data-type="pdf">PDF</button>
+                <button type="button" aria-pressed="false" data-type="word">Word</button>
+                <button type="button" aria-pressed="false" data-type="presentation">演示</button>
+                <button type="button" aria-pressed="false" data-type="keynote">Keynote</button>
+                <button type="button" aria-pressed="false" data-type="spreadsheet">表格</button>
+              </div>
+            </div>
+            <div class="filter-panel" aria-label="搜索与状态筛选">
               <label class="filter-search">
                 <span class="sr-only">搜索页面</span>
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2093,11 +2214,11 @@
               </div>
               <div class="field">
                 <label for="publicSeoDescriptionInput">SEO 描述</label>
-                <textarea id="publicSeoDescriptionInput" spellcheck="false" placeholder="公开文档索引，集中阅读 HTML、PDF 与 Word 文档。"></textarea>
+                <textarea id="publicSeoDescriptionInput" spellcheck="false" placeholder="公开文档索引，集中阅读 HTML、Markdown、PDF、Word、PPT、Keynote 与 Excel 文档。"></textarea>
               </div>
               <div class="field">
                 <label for="publicSeoKeywordsInput">SEO 关键词</label>
-                <input id="publicSeoKeywordsInput" autocomplete="off" placeholder="TokDoc,文档索引,HTML,PDF,Word" />
+                <input id="publicSeoKeywordsInput" autocomplete="off" placeholder="TokDoc,文档索引,HTML,Markdown,PDF,Word,PPT,Keynote,Excel" />
               </div>
             </section>
 

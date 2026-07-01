@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import {
   basenameWithoutExtension,
@@ -12,16 +13,25 @@ import {
   generatedMimeType,
   injectAssetBase,
   injectTrackingCode,
+  isEditableFileType,
+  isHtmlBackedFileType,
   isHtmlFile,
+  isMarkdownFile,
   isManagedFile,
+  isSpreadsheetFile,
+  managedFileTypes,
   managedFileType,
   parentDirectoryNameFromPath,
   parentDirectoryNameFromRelative,
   parseHtmlMetadata,
+  parseMarkdownMetadata,
   removeEditBridge,
+  renderMarkdownDocument,
   slugify,
 } from './html.js';
 import { defaultAdminPath, normalizeAdminPath, safeAdminPath } from './admin-path.js';
+import { parseSpreadsheetMetadata, renderSpreadsheetDocument } from './spreadsheet.js';
+import { renderWordDocument } from './word.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -48,11 +58,11 @@ function dateStamp(iso) {
 }
 
 function generatedFileNameForPage(page) {
-  return generatedFileNameForAsset(page, 'html');
+  return generatedFileNameForAsset(page, generatedExtensionForPage(page));
 }
 
 function generatedExtensionForPage(page) {
-  return page.fileType === 'html' ? 'html' : 'pdf';
+  return isHtmlBackedFileType(page.fileType, page.mimeType) ? 'html' : 'pdf';
 }
 
 function generatedFileNameForAsset(page, extension = 'html') {
@@ -93,13 +103,19 @@ async function pathExists(filePath) {
 function rowToPage(row) {
   if (!row) return null;
   const fileType = row.file_type || 'html';
+  const rawMimeType = row.mime_type || generatedMimeType(fileType);
+  const generatedPath = row.generated_path || '';
+  const mimeType =
+    fileType !== 'html' && /\.pdf$/i.test(generatedPath) && /^text\/html\b/i.test(rawMimeType)
+      ? 'application/pdf'
+      : rawMimeType;
   return {
     id: row.id,
     slug: row.slug,
     fileName: row.file_name,
     title: row.title,
     fileType,
-    mimeType: row.mime_type || generatedMimeType(fileType),
+    mimeType,
     sourceType: row.source_type,
     sourcePath: row.source_path,
     directoryName: row.directory_name || '',
@@ -110,7 +126,7 @@ function rowToPage(row) {
     uploadTime: displayTime(row.created_at),
     updatedTime: displayTime(row.updated_at),
     revision: row.revision,
-    generatedPath: row.generated_path,
+    generatedPath,
     rawMtimeMs: row.raw_mtime_ms,
     checksum: row.checksum,
     edited: Boolean(row.edited),
@@ -120,7 +136,7 @@ function rowToPage(row) {
     deletedTime: row.deleted_at ? displayTime(row.deleted_at) : '',
     deletedPath: row.deleted_path || '',
     url: `/${row.slug}`,
-    editUrl: fileType === 'html' ? `/${row.slug}?edit=1` : '',
+    editUrl: isEditableFileType(fileType, mimeType) ? `/${row.slug}?edit=1` : '',
   };
 }
 
@@ -205,12 +221,44 @@ function safeDestination(root, relativePath) {
   return resolvedDestination;
 }
 
+function uploadAssetBaseUrlForPath(uploadsDir, assetDir) {
+  const relative = path.relative(uploadsDir, assetDir).replace(/\\/g, '/');
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return '';
+  const parts = relative.split('/').filter(Boolean);
+  if (!parts.length) return '';
+  return `/page-assets/${parts.map((segment) => encodeURIComponent(segment)).join('/')}/`;
+}
+
+async function copyConvertedSiblingAssets(outputPath, destinationDir) {
+  const outputDir = path.dirname(outputPath);
+  const outputName = path.basename(outputPath);
+  const entries = (await fs.readdir(outputDir, { withFileTypes: true })).filter((entry) => entry.name !== outputName);
+  if (!entries.length) return false;
+  await fs.rm(destinationDir, { recursive: true, force: true });
+  await fs.mkdir(destinationDir, { recursive: true });
+  for (const entry of entries) {
+    await fs.cp(path.join(outputDir, entry.name), path.join(destinationDir, entry.name), { recursive: true });
+  }
+  return true;
+}
+
 const defaultAuthUsername = 'admin';
 const defaultAuthPassword = 'tokdoc';
 const defaultSiteName = 'TokDoc 文档索引';
 const defaultAdminName = 'TokDoc';
-const defaultPublicSeoDescription = '公开文档索引，集中阅读 HTML、PDF 与 Word 文档。';
-const defaultPublicSeoKeywords = 'TokDoc,文档索引,HTML,PDF,Word';
+const defaultPublicSeoDescription = '公开文档索引，集中阅读 HTML、Markdown、PDF、Word、PPT、Keynote 与 Excel 文档。';
+const defaultPublicSeoKeywords = 'TokDoc,文档索引,HTML,Markdown,PDF,Word,PPT,Keynote,Excel';
+const documentPdfFilters = {
+  presentation: 'pdf:impress_pdf_Export',
+  keynote: 'pdf:impress_pdf_Export',
+};
+
+function stagedDocumentTitle(file) {
+  if (isHtmlFile(file.relativePath)) return parseHtmlMetadata(file.buffer.toString('utf8'), file.fileName).title;
+  if (isMarkdownFile(file.relativePath)) return parseMarkdownMetadata(file.buffer.toString('utf8'), file.fileName).title;
+  if (isSpreadsheetFile(file.relativePath)) return parseSpreadsheetMetadata(file.fileName).title;
+  return documentTitleFromFileName(file.fileName);
+}
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('base64url');
@@ -325,7 +373,7 @@ export class PageStore {
   }
 
   publicPageStats() {
-    const stats = { all: 0, html: 0, pdf: 0, word: 0 };
+    const stats = Object.fromEntries([['all', 0], ...managedFileTypes.map((type) => [type, 0])]);
     for (const page of this.listPages({ scope: 'active', status: 'all' }).filter(isPublicListablePage)) {
       stats.all += 1;
       if (Object.hasOwn(stats, page.fileType)) stats[page.fileType] += 1;
@@ -335,7 +383,7 @@ export class PageStore {
 
   listPublicPagesPage(filters = {}) {
     const type = String(filters.type || filters.fileType || 'all').trim().toLowerCase();
-    const normalizedType = ['html', 'pdf', 'word'].includes(type) ? type : 'all';
+    const normalizedType = managedFileTypes.includes(type) ? type : 'all';
     const requestedSort = String(filters.sort || 'updated_desc').trim();
     const publicSort = ['updated_desc', 'created_desc'].includes(requestedSort) ? requestedSort : 'updated_desc';
     const allFilteredPages = this.listPages({
@@ -496,9 +544,7 @@ export class PageStore {
 
     const documents = managedFiles.map((file) => {
       const fileType = managedFileType(file.relativePath);
-      const title = isHtmlFile(file.relativePath)
-        ? parseHtmlMetadata(file.buffer.toString('utf8'), file.fileName).title
-        : documentTitleFromFileName(file.fileName);
+      const title = stagedDocumentTitle(file);
       return {
         id: crypto.randomUUID(),
         relativePath: file.relativePath,
@@ -586,12 +632,12 @@ export class PageStore {
         };
       });
     const managedFiles = normalized.filter((file) => isManagedFile(file.relativePath));
-    const htmlFiles = managedFiles.filter((file) => isHtmlFile(file.relativePath));
+    const htmlLikeFiles = managedFiles.filter((file) => isHtmlFile(file.relativePath) || isMarkdownFile(file.relativePath));
     if (!managedFiles.length) return [];
 
     const uploadRootId = crypto.randomUUID();
     const uploadRoot = path.join(this.config.uploadsDir, uploadRootId);
-    const hasFolderAssets = normalized.length > htmlFiles.length || normalized.some((file) => file.relativePath.includes('/'));
+    const hasFolderAssets = normalized.length > htmlLikeFiles.length || normalized.some((file) => file.relativePath.includes('/'));
     await fs.mkdir(uploadRoot, { recursive: true });
 
     const stored = new Map();
@@ -603,42 +649,81 @@ export class PageStore {
     }
 
     const created = [];
-    for (const file of managedFiles) {
-      const sourcePath = stored.get(file.relativePath);
-      if (isHtmlFile(file.relativePath)) {
-        const content = file.buffer.toString('utf8');
+    try {
+      for (const file of managedFiles) {
+        const sourcePath = stored.get(file.relativePath);
+        if (isHtmlFile(file.relativePath)) {
+          const content = file.buffer.toString('utf8');
+          created.push(
+            await this.createPageFromContent({
+              id: file.id || crypto.randomUUID(),
+              fileName: file.fileName,
+              content,
+              title: file.title,
+              visibility: file.visibility,
+              sourceType: 'upload',
+              sourcePath,
+              directoryName: parentDirectoryNameFromRelative(file.relativePath),
+              rawMtimeMs: null,
+              assetBaseUrl: hasFolderAssets ? assetBaseUrl(uploadRootId, file.relativePath) : '',
+            }),
+          );
+          continue;
+        }
+        if (isMarkdownFile(file.relativePath)) {
+          const markdown = file.buffer.toString('utf8');
+          const content = renderMarkdownDocument(markdown, file.fileName, file.title);
+          created.push(
+            await this.createPageFromContent({
+              id: file.id || crypto.randomUUID(),
+              fileName: file.fileName,
+              content,
+              title: file.title || parseMarkdownMetadata(markdown, file.fileName).title,
+              visibility: file.visibility,
+              sourceType: 'upload',
+              sourcePath,
+              directoryName: parentDirectoryNameFromRelative(file.relativePath),
+              rawMtimeMs: null,
+              assetBaseUrl: hasFolderAssets ? assetBaseUrl(uploadRootId, file.relativePath) : '',
+              fileType: 'markdown',
+              sourceChecksum: file.buffer,
+            }),
+          );
+          continue;
+        }
         created.push(
-          await this.createPageFromContent({
+          await this.createDocumentAsset({
             id: file.id || crypto.randomUUID(),
             fileName: file.fileName,
-            content,
             title: file.title,
             visibility: file.visibility,
+            buffer: file.buffer,
             sourceType: 'upload',
             sourcePath,
             directoryName: parentDirectoryNameFromRelative(file.relativePath),
             rawMtimeMs: null,
-            assetBaseUrl: hasFolderAssets ? assetBaseUrl(uploadRootId, file.relativePath) : '',
+            fileType: managedFileType(file.relativePath),
           }),
         );
-        continue;
       }
-      created.push(
-        await this.createDocumentAsset({
-          id: file.id || crypto.randomUUID(),
-          fileName: file.fileName,
-          title: file.title,
-          visibility: file.visibility,
-          buffer: file.buffer,
-          sourceType: 'upload',
-          sourcePath,
-          directoryName: parentDirectoryNameFromRelative(file.relativePath),
-          rawMtimeMs: null,
-          fileType: managedFileType(file.relativePath),
-        }),
-      );
+    } catch (error) {
+      for (const page of created.reverse()) {
+        await this.discardCreatedPage(page);
+      }
+      await fs.rm(uploadRoot, { recursive: true, force: true });
+      throw error;
     }
     return created;
+  }
+
+  async discardCreatedPage(page) {
+    if (!page?.id) return;
+    this.db.prepare('DELETE FROM versions WHERE page_id = ?').run(page.id);
+    this.db.prepare('DELETE FROM pages WHERE id = ?').run(page.id);
+    if (page.generatedPath) {
+      await fs.rm(await this.resolveGeneratedPath(page), { force: true });
+    }
+    await fs.rm(path.join(this.config.versionsDir, page.id), { recursive: true, force: true });
   }
 
   async addSamplePages() {
@@ -690,12 +775,14 @@ export class PageStore {
     rawMtimeMs,
     visibility = 'public',
     assetBaseUrl: pageAssetBaseUrl = '',
+    fileType = 'html',
+    sourceChecksum = content,
   }) {
     const createdAt = nowIso();
     const parsed = parseHtmlMetadata(content, fileName);
     const pageTitle = String(title || '').trim() || parsed.title;
     const slug = this.uniqueManagedSlug();
-    const generatedPath = path.join(this.config.generatedDir, generatedFileNameForPage({ slug, fileName, createdAt }));
+    const generatedPath = path.join(this.config.generatedDir, generatedFileNameForPage({ slug, fileName, createdAt, fileType }));
     const generatedContent = this.prepareGeneratedHtml(content, pageAssetBaseUrl);
     await fs.writeFile(generatedPath, generatedContent);
     const info = {
@@ -703,8 +790,8 @@ export class PageStore {
       slug,
       fileName,
       title: pageTitle,
-      fileType: 'html',
-      mimeType: generatedMimeType('html'),
+      fileType,
+      mimeType: generatedMimeType(fileType),
       sourceType,
       sourcePath,
       directoryName,
@@ -715,7 +802,7 @@ export class PageStore {
       revision: 1,
       generatedPath,
       rawMtimeMs,
-      checksum: checksum(content),
+      checksum: checksum(sourceChecksum),
       edited: 0,
       accessCount: 0,
       visibility: normalizeVisibility(visibility),
@@ -727,12 +814,32 @@ export class PageStore {
   async createDocumentAsset({ id, fileName, title, buffer, sourceType, sourcePath, directoryName, rawMtimeMs, fileType, visibility = 'public' }) {
     const createdAt = nowIso();
     const slug = this.uniqueManagedSlug();
-    const generatedPath = path.join(this.config.generatedDir, generatedFileNameForAsset({ slug, fileName, createdAt }, 'pdf'));
+    const generatedExtension = fileType === 'spreadsheet' || fileType === 'word' ? 'html' : 'pdf';
+    const generatedPath = path.join(this.config.generatedDir, generatedFileNameForAsset({ slug, fileName, createdAt }, generatedExtension));
     await fs.mkdir(path.dirname(generatedPath), { recursive: true });
+    let generatedSize = Buffer.byteLength(buffer);
     if (fileType === 'pdf') {
       await fs.writeFile(generatedPath, buffer);
     } else if (fileType === 'word') {
-      await this.convertWordToPdf(sourcePath, generatedPath);
+      try {
+        generatedSize = await this.convertWordToHtml(sourcePath, generatedPath, fileName, title);
+      } catch (error) {
+        if (error.code === 'DOCUMENT_CONVERSION_FAILED') throw error;
+        const renderError = new Error(`Word render failed: ${error.message}`);
+        renderError.code = 'DOCUMENT_CONVERSION_FAILED';
+        throw renderError;
+      }
+    } else if (fileType === 'spreadsheet') {
+      try {
+        generatedSize = await this.convertSpreadsheetToHtml(sourcePath, generatedPath, fileName, title);
+      } catch (error) {
+        if (error.code === 'DOCUMENT_CONVERSION_FAILED') throw error;
+        const renderError = new Error(`Spreadsheet render failed: ${error.message}`);
+        renderError.code = 'DOCUMENT_CONVERSION_FAILED';
+        throw renderError;
+      }
+    } else if (Object.hasOwn(documentPdfFilters, fileType)) {
+      await this.convertDocumentToPdf(sourcePath, generatedPath, fileType);
     } else {
       throw new Error(`Unsupported document type: ${fileType}`);
     }
@@ -746,7 +853,7 @@ export class PageStore {
       sourceType,
       sourcePath,
       directoryName,
-      size: Buffer.byteLength(buffer),
+      size: generatedSize,
       status: 'published',
       createdAt,
       updatedAt: createdAt,
@@ -762,22 +869,64 @@ export class PageStore {
     return this.getPage(id);
   }
 
-  async convertWordToPdf(sourcePath, generatedPath) {
+  async convertOfficeDocument(sourcePath, { fileType, filter, extension, timeout = 180000 }, handleOutput) {
     const converter = this.config.officeConverterBin || process.env.TOKDOC_SOFFICE_BIN || process.env.TOKHTML_SOFFICE_BIN || 'soffice';
+    if (!filter) {
+      const error = new Error(`Unsupported document type: ${fileType}`);
+      error.code = 'DOCUMENT_CONVERSION_FAILED';
+      throw error;
+    }
     const tempDir = await fs.mkdtemp(path.join(this.config.dataDir, 'convert-'));
-    const expectedOutput = path.join(tempDir, `${basenameWithoutExtension(sourcePath)}.pdf`);
+    const outputDir = path.join(tempDir, 'out');
+    const profileDir = path.join(tempDir, 'profile');
     try {
-      await execFileAsync(converter, ['--headless', '--convert-to', 'pdf:writer_pdf_Export', '--outdir', tempDir, sourcePath], {
-        timeout: 120000,
+      await fs.mkdir(outputDir, { recursive: true });
+      await execFileAsync(converter, [`-env:UserInstallation=${pathToFileURL(profileDir).href}`, '--headless', '--convert-to', filter, '--outdir', outputDir, sourcePath], {
+        timeout,
       });
-      await fs.rename(expectedOutput, generatedPath);
+      const outputs = (await fs.readdir(outputDir)).filter((fileName) => fileName.toLowerCase().endsWith(`.${extension}`));
+      if (!outputs.length) throw new Error(`No ${extension.toUpperCase()} output produced`);
+      await handleOutput(path.join(outputDir, outputs[0]));
     } catch (error) {
-      const conversionError = new Error(`Word conversion failed: ${error.message}`);
-      conversionError.code = 'WORD_CONVERSION_FAILED';
+      const conversionError = new Error(`Document conversion failed: ${error.message}`);
+      conversionError.code = 'DOCUMENT_CONVERSION_FAILED';
       throw conversionError;
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
+  }
+
+  async convertDocumentToPdf(sourcePath, generatedPath, fileType) {
+    const filter = documentPdfFilters[fileType];
+    await this.convertOfficeDocument(sourcePath, { fileType, filter, extension: 'pdf' }, async (outputPath) => {
+      await fs.rename(outputPath, generatedPath);
+    });
+  }
+
+  async convertWordToHtml(sourcePath, generatedPath, fileName, title) {
+    let generatedSize = 0;
+    await this.convertOfficeDocument(sourcePath, { fileType: 'word', filter: 'html', extension: 'html' }, async (outputPath) => {
+      const convertedHtml = await fs.readFile(outputPath, 'utf8');
+      const assetDirName = `${path.basename(generatedPath, path.extname(generatedPath))}-assets`;
+      const assetDir = path.join(path.dirname(sourcePath), assetDirName);
+      const hasAssets = await copyConvertedSiblingAssets(outputPath, assetDir);
+      const assetBaseUrl = hasAssets ? uploadAssetBaseUrlForPath(this.config.uploadsDir, assetDir) : '';
+      const generatedContent = this.prepareGeneratedHtml(renderWordDocument(convertedHtml, fileName, title, assetBaseUrl));
+      await fs.writeFile(generatedPath, generatedContent);
+      generatedSize = Buffer.byteLength(generatedContent);
+    });
+    return generatedSize;
+  }
+
+  async convertSpreadsheetToHtml(sourcePath, generatedPath, fileName, title) {
+    let generatedSize = 0;
+    await this.convertOfficeDocument(sourcePath, { fileType: 'spreadsheet', filter: 'html', extension: 'html' }, async (outputPath) => {
+      const convertedHtml = await fs.readFile(outputPath, 'utf8');
+      const generatedContent = this.prepareGeneratedHtml(renderSpreadsheetDocument(convertedHtml, fileName, title));
+      await fs.writeFile(generatedPath, generatedContent);
+      generatedSize = Buffer.byteLength(generatedContent);
+    });
+    return generatedSize;
   }
 
   insertPage(info) {
@@ -1131,7 +1280,7 @@ export class PageStore {
       error.code = 'NOT_FOUND';
       throw error;
     }
-    if (page.fileType !== 'html') {
+    if (!isEditableFileType(page.fileType, page.mimeType)) {
       const error = new Error('Document assets cannot be edited online');
       error.code = 'DOCUMENT_NOT_EDITABLE';
       throw error;
@@ -1149,7 +1298,7 @@ export class PageStore {
     const generatedPath = await this.resolveGeneratedPath(page);
     await fs.writeFile(generatedPath, nextContent);
     const watchDir = this.watchDirForPath(page.sourcePath);
-    if (page.sourceType === 'watch' && watchDir?.allowWrite) {
+    if (page.fileType === 'html' && page.sourceType === 'watch' && watchDir?.allowWrite) {
       await fs.writeFile(page.sourcePath, nextContent);
     }
     const now = nowIso();

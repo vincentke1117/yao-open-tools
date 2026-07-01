@@ -374,6 +374,11 @@
         background: var(--green-soft);
       }
 
+      .type-markdown {
+        color: #4b5563;
+        background: #edf0f3;
+      }
+
       .type-pdf {
         color: var(--amber);
         background: var(--amber-soft);
@@ -382,6 +387,21 @@
       .type-word {
         color: var(--violet);
         background: var(--violet-soft);
+      }
+
+      .type-presentation {
+        color: var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .type-keynote {
+        color: #4f46a7;
+        background: #eeedff;
+      }
+
+      .type-spreadsheet {
+        color: #276b5b;
+        background: #e5f5ef;
       }
 
       .title-cell {
@@ -651,7 +671,7 @@
           </div>
           <div>
             <span class="brand-title">TokDoc</span>
-            <span class="brand-subtitle">公开文档索引 · HTML / PDF / Word</span>
+            <span class="brand-subtitle">公开文档索引 · HTML / Markdown / PDF / Word / PPT / Keynote / Excel</span>
           </div>
         </div>
         <div class="topbar-actions">
@@ -674,8 +694,12 @@
           <div class="stats-line" id="statsLine" aria-live="polite">
             <span>全部 <strong>0</strong></span>
             <span>HTML <strong>0</strong></span>
+            <span>Markdown <strong>0</strong></span>
             <span>PDF <strong>0</strong></span>
             <span>Word <strong>0</strong></span>
+            <span>演示 <strong>0</strong></span>
+            <span>Keynote <strong>0</strong></span>
+            <span>表格 <strong>0</strong></span>
           </div>
         </div>
         <label class="search-wrap">
@@ -693,8 +717,12 @@
           <nav class="segmented" id="typeTabs" aria-label="文档类型筛选">
             <a href="/" data-type="all">全部</a>
             <a href="/type/html" data-type="html">HTML</a>
+            <a href="/type/markdown" data-type="markdown">Markdown</a>
             <a href="/type/pdf" data-type="pdf">PDF</a>
             <a href="/type/word" data-type="word">Word</a>
+            <a href="/type/presentation" data-type="presentation">演示</a>
+            <a href="/type/keynote" data-type="keynote">Keynote</a>
+            <a href="/type/spreadsheet" data-type="spreadsheet">表格</a>
           </nav>
           <label class="sort-wrap">
             排序

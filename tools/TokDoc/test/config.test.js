@@ -14,6 +14,7 @@ test('loads TokDoc defaults with new environment variable names', async (t) => {
     TOKDOC_WATCH_DIRS: path.join(dataDir, 'watch-a'),
     TOKDOC_ALLOW_SOURCE_WRITE: 'true',
     TOKDOC_SOFFICE_BIN: '/usr/bin/soffice',
+    TOKDOC_UPLOAD_MAX_MB: '512',
     TOKDOC_INITIAL_USERNAME: 'owner',
     TOKDOC_INITIAL_PASSWORD: 'first-secret',
     HOST: '0.0.0.0',
@@ -26,6 +27,7 @@ test('loads TokDoc defaults with new environment variable names', async (t) => {
   assert.deepEqual(config.watchDirs, [path.join(dataDir, 'watch-a')]);
   assert.equal(config.allowSourceWrite, true);
   assert.equal(config.officeConverterBin, '/usr/bin/soffice');
+  assert.equal(config.uploadMaxBytes, 512 * 1024 * 1024);
   assert.equal(config.adminPathOverride, '');
   assert.equal(config.initialAuthUsername, 'owner');
   assert.equal(config.initialAuthPassword, 'first-secret');
