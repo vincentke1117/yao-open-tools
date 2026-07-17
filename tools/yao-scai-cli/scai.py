@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import curses
 import heapq
 import json
 import locale
@@ -19,14 +18,41 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+try:
+    import curses
+except ImportError:  # Windows 默认 Python 无 _curses；可 pip install windows-curses
+    curses = None  # type: ignore[assignment]
+
+IS_WINDOWS = os.name == "nt"
+
+
+def default_computer_scan_root() -> Path:
+    """全盘安全扫描根目录：Windows 为系统盘（通常 C:\\），其它平台为 /。"""
+    if IS_WINDOWS:
+        drive = os.environ.get("SystemDrive", "C:")
+        if not drive.endswith(("\\", "/")):
+            drive = drive + "\\"
+        return Path(drive)
+    return Path("/")
+
+
+def path_prefix_tuple(*relative_parts: str) -> tuple[str, ...]:
+    """基于系统盘/根目录构造绝对路径前缀字符串。"""
+    root = default_computer_scan_root()
+    prefixes: list[str] = []
+    for part in relative_parts:
+        prefixes.append(str(root / part))
+    return tuple(prefixes)
+
+
 DEFAULT_SCAN_ROOT = Path.cwd()
 DEFAULT_LIMIT = 20
 DEFAULT_BRIEF_LIMIT = 50
 DEFAULT_MORE_LIMIT = 100
 DEFAULT_ANALYSIS_LIMIT = 80
-COMPUTER_SCAN_ROOT = Path("/")
+COMPUTER_SCAN_ROOT = default_computer_scan_root()
 COMPRESSED_SUFFIXES = {".gz", ".bz2", ".xz", ".zip", ".zst"}
-ARCHIVE_SUFFIXES = {".7z", ".bz2", ".dmg", ".gz", ".iso", ".rar", ".tar", ".tgz", ".xz", ".zip", ".zst"}
+ARCHIVE_SUFFIXES = {".7z", ".bz2", ".dmg", ".gz", ".iso", ".rar", ".tar", ".tgz", ".xz", ".zip", ".zst", ".cab", ".msix", ".appx"}
 MEDIA_SUFFIXES = {
     ".avi",
     ".m4a",
@@ -62,9 +88,41 @@ DEV_CACHE_NAMES = {
     "dist",
     "node_modules",
     "target",
+    "npm-cache",
+    "pip",
+    "pip-cache",
+    "nuget",
+    "nugetcache",
+    "yarn",
+    "pnpm-store",
+    ".pnpm-store",
+    "bower",
+    "cypress",
+    "electron",
+    "gradle",
+    "caches",
 }
-BACKUP_MARKERS = {"backup", "backups", "bak", "old", "archive", "archives", "备份", "归档"}
+# 名称命中即可视为偏安全的临时/缓存目录（目录名小写比较）
+SAFE_CACHE_DIR_NAMES = {
+    "temp",
+    "tmp",
+    "cache",
+    "caches",
+    "cacheddata",
+    "code cache",
+    "gpucache",
+    "shadercache",
+    "crashdumps",
+    "temporary internet files",
+    "inetcache",
+    "webcache",
+    "package cache",
+    "deliveryoptimization",
+}
+BACKUP_MARKERS = {"backup", "backups", "bak", "old", "archive", "archives", "备份", "归档", "windows.old"}
 DOWNLOAD_MARKERS = {"download", "downloads", "下载"}
+INSTALLER_SUFFIXES = {".msi", ".msix", ".appx", ".exe", ".msu", ".cab"}
+VIRTUAL_DISK_SUFFIXES = {".vhdx", ".vhd", ".vmdk", ".qcow2", ".wim"}
 COMMAND_ALIASES = {
     "brief": "brief",
     "b": "brief",
@@ -87,17 +145,34 @@ COMMAND_ALIASES = {
     "m": "more",
     "ai": "ai",
 }
-COMPUTER_ROOT_ALIASES = {"all", "c", "computer", "mac", "root", "全盘", "电脑", "根目录"}
+COMPUTER_ROOT_ALIASES = {
+    "all",
+    "c",
+    "computer",
+    "mac",
+    "root",
+    "全盘",
+    "电脑",
+    "根目录",
+    "c:",
+    "c:\\",
+    "c:/",
+    "c盘",
+    "c 盘",
+    "系统盘",
+}
 OPTIONS_REQUIRING_VALUE = {"--limit", "--max-depth", "--mode", "--timeout"}
 TUI_ALIASES: set[str] = set()
 PLAIN_ALIASES: set[str] = set()
 DEFAULT_EXCLUDED_DIR_NAMES = {
+    # macOS / Unix
     ".Trash",
     ".Spotlight-V100",
     ".fseventsd",
     ".TemporaryItems",
     ".DocumentRevisions-V100",
     "Library",
+    # 开发缓存（两平台共用）
     ".cache",
     ".npm",
     ".pnpm-store",
@@ -113,35 +188,121 @@ DEFAULT_EXCLUDED_DIR_NAMES = {
     "__pycache__",
     ".next",
     ".turbo",
+    # Windows 系统与受管目录名
+    "Windows",
+    "WinSxS",
+    "$Recycle.Bin",
+    "System Volume Information",
+    "Recovery",
+    "PerfLogs",
+    "Boot",
+    "Documents and Settings",
+    "Program Files",
+    "Program Files (x86)",
+    "ProgramData",
+    "Config.Msi",
+    "MSOCache",
+    "Intel",
+    "AMD",
+    "NVIDIA",
+    "WindowsApps",
 }
-SYSTEM_ROOT_PREFIXES = (
-    "/System",
-    "/Library",
-    "/Applications",
-    "/private",
-    "/Volumes",
-    "/dev",
-    "/bin",
-    "/sbin",
-    "/usr",
-    "/opt",
-    "/cores",
-)
+if IS_WINDOWS:
+    SYSTEM_ROOT_PREFIXES = path_prefix_tuple(
+        "Windows",
+        "Program Files",
+        "Program Files (x86)",
+        "ProgramData",
+        "$Recycle.Bin",
+        "System Volume Information",
+        "Recovery",
+        "PerfLogs",
+        "Boot",
+        "Documents and Settings",
+    )
+    RISKY_SYSTEM_PREFIXES = path_prefix_tuple(
+        "Windows",
+        "Program Files",
+        "Program Files (x86)",
+        "ProgramData",
+        "$Recycle.Bin",
+        "System Volume Information",
+        "Recovery",
+        "PerfLogs",
+        "Boot",
+        "WindowsApps",
+    )
+    RISKY_SYSTEM_FILE_NAMES = {
+        "pagefile.sys",
+        "hiberfil.sys",
+        "swapfile.sys",
+        "dumpstack.log.tmp",
+    }
+else:
+    SYSTEM_ROOT_PREFIXES = (
+        "/System",
+        "/Library",
+        "/Applications",
+        "/private",
+        "/Volumes",
+        "/dev",
+        "/bin",
+        "/sbin",
+        "/usr",
+        "/opt",
+        "/cores",
+    )
+    RISKY_SYSTEM_PREFIXES = (
+        "/System",
+        "/Library",
+        "/Applications",
+        "/dev",
+        "/bin",
+        "/sbin",
+        "/usr",
+        "/opt",
+        "/cores",
+    )
+    RISKY_SYSTEM_FILE_NAMES = set()
+
 ANSI_RESET = "\033[0m"
 ANSI_BOLD = "\033[1m"
 ANSI_DIM = "\033[2m"
 ANSI_CYAN = "\033[36m"
-RISKY_SYSTEM_PREFIXES = (
-    "/System",
-    "/Library",
-    "/Applications",
-    "/dev",
-    "/bin",
-    "/sbin",
-    "/usr",
-    "/opt",
-    "/cores",
-)
+
+
+def enable_windows_ansi() -> None:
+    """在 Windows 控制台尽量启用 ANSI 颜色与 VT 处理。"""
+    if not IS_WINDOWS:
+        return
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            kernel32.SetConsoleMode(handle, mode.value | 0x0004)  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    except Exception:
+        pass
+
+
+def normalize_path_key(path: Path | str) -> str:
+    text = str(path)
+    if IS_WINDOWS:
+        return text.replace("/", "\\").rstrip("\\").lower()
+    return text.rstrip("/")
+
+
+def path_matches_any_prefix(path: Path | str, prefixes: tuple[str, ...]) -> bool:
+    path_key = normalize_path_key(path)
+    for prefix in prefixes:
+        prefix_key = normalize_path_key(prefix)
+        if not prefix_key:
+            continue
+        if path_key == prefix_key or path_key.startswith(prefix_key + ("\\" if IS_WINDOWS else "/")):
+            return True
+    return False
 
 
 @dataclass(order=True)
@@ -234,15 +395,24 @@ def truncate_middle(text: str, width: int) -> str:
     return f"{text[:left]}…{text[-right:]}"
 
 
+def is_computer_scan_root(path: Path) -> bool:
+    return normalize_path_key(path) == normalize_path_key(COMPUTER_SCAN_ROOT)
+
+
 def should_skip_dir(path: Path, root: Path, include_all: bool) -> bool:
     if include_all or path == root:
         return False
 
-    path_str = str(path)
-    if root == COMPUTER_SCAN_ROOT and any(path_str == prefix or path_str.startswith(prefix + os.sep) for prefix in SYSTEM_ROOT_PREFIXES):
+    # 全盘扫描时跳过系统/受管前缀，避免扫进 Windows / Program Files 等区域
+    if is_computer_scan_root(root) and path_matches_any_prefix(path, SYSTEM_ROOT_PREFIXES):
         return True
 
-    return path.name in DEFAULT_EXCLUDED_DIR_NAMES
+    # 目录名大小写在 Windows 上不敏感
+    name = path.name
+    if IS_WINDOWS:
+        excluded_lower = {item.lower() for item in DEFAULT_EXCLUDED_DIR_NAMES}
+        return name.lower() in excluded_lower
+    return name in DEFAULT_EXCLUDED_DIR_NAMES
 
 
 def push_top_record(heap: list[object], record: object, limit: int) -> None:
@@ -420,6 +590,9 @@ def display_name(path: Path, root: Path) -> str:
 
 
 def owner_group_name(uid: int, gid: int) -> tuple[str, str]:
+    if IS_WINDOWS:
+        # Windows 无 Unix uid/gid 语义；详情面板用占位即可
+        return "-", "-"
     try:
         import grp
         import pwd
@@ -485,14 +658,22 @@ def selected_record_detail_lines(
     symlink_target = ""
 
     if file_stat:
-        owner, group = owner_group_name(file_stat.st_uid, file_stat.st_gid)
-        mode_text = f"{statlib.filemode(file_stat.st_mode)} / {oct(statlib.S_IMODE(file_stat.st_mode))}"
+        owner, group = owner_group_name(getattr(file_stat, "st_uid", 0), getattr(file_stat, "st_gid", 0))
+        try:
+            mode_text = f"{statlib.filemode(file_stat.st_mode)} / {oct(statlib.S_IMODE(file_stat.st_mode))}"
+        except (AttributeError, OSError, ValueError):
+            mode_text = oct(statlib.S_IMODE(file_stat.st_mode))
         inode = str(file_stat.st_ino)
         device = str(file_stat.st_dev)
         hard_links = str(file_stat.st_nlink)
         accessed = format_timestamp(file_stat.st_atime)
-        changed = format_timestamp(file_stat.st_ctime)
-        created = format_timestamp(getattr(file_stat, "st_birthtime", None))
+        # Windows 上 st_ctime 通常是创建时间；Unix 上 st_ctime 是状态变更时间
+        if IS_WINDOWS:
+            created = format_timestamp(file_stat.st_ctime)
+            changed = "-"
+        else:
+            changed = format_timestamp(file_stat.st_ctime)
+            created = format_timestamp(getattr(file_stat, "st_birthtime", None))
         if statlib.S_ISLNK(file_stat.st_mode):
             try:
                 symlink_target = os.readlink(path)
@@ -532,8 +713,12 @@ def print_scan_summary(root: Path, stats: ScanStats, elapsed: float, include_all
     if include_all:
         print("扫描模式: 全量扫描，不跳过默认目录")
     else:
-        excluded = ", ".join(sorted(DEFAULT_EXCLUDED_DIR_NAMES))
-        print(f"默认排除: {excluded}")
+        names = sorted(DEFAULT_EXCLUDED_DIR_NAMES, key=str.lower)
+        if len(names) > 12:
+            preview = ", ".join(names[:12])
+            print(f"默认排除: {preview} ... 等共 {len(names)} 项")
+        else:
+            print(f"默认排除: {', '.join(names)}")
     print(
         "统计信息: "
         f"目录 {stats.scanned_dirs} 个, "
@@ -779,11 +964,60 @@ def looks_like_backup(path: Path) -> bool:
     return any(marker in lowered for marker in BACKUP_MARKERS) or name.endswith((".bak", ".old", ".backup"))
 
 
+def looks_like_windows_temp_or_cache(path: Path, parts: set[str]) -> bool:
+    if not IS_WINDOWS:
+        return False
+    name_lower = path.name.lower()
+    if name_lower in SAFE_CACHE_DIR_NAMES or parts & SAFE_CACHE_DIR_NAMES:
+        return True
+    # AppData\Local\Temp、Windows\Temp 等
+    joined = str(path).replace("/", "\\").lower().strip("\\")
+    padded = f"\\{joined}\\"
+    markers = (
+        "\\temp\\",
+        "\\tmp\\",
+        "\\cache\\",
+        "\\caches\\",
+        "\\code cache\\",
+        "\\gpucache\\",
+        "\\shadercache\\",
+        "\\crashdumps\\",
+        "\\inetcache\\",
+        "\\webcache\\",
+        "\\package cache\\",
+        "\\deliveryoptimization\\",
+        "\\temporary internet files\\",
+    )
+    return any(marker in padded for marker in markers)
+
+
+def looks_like_installer_package(path: Path) -> bool:
+    suffix = path.suffix.lower()
+    if suffix in INSTALLER_SUFFIXES:
+        return True
+    name = path.name.lower()
+    return name.endswith((".exe", ".msi")) and any(
+        token in name for token in ("setup", "install", "installer", "update", "patch", "runtime", "redistributable")
+    )
+
+
 def classify_path(path: Path, size: int, kind: str) -> Insight:
     suffix = path.suffix.lower()
     parts = path_parts_lower(path)
+    name_lower = path.name.lower()
 
-    if any(str(path) == prefix or str(path).startswith(prefix + os.sep) for prefix in RISKY_SYSTEM_PREFIXES):
+    if name_lower in RISKY_SYSTEM_FILE_NAMES:
+        return Insight(
+            path=path,
+            size=size,
+            kind=kind,
+            risk="risky",
+            category="系统虚拟内存/休眠文件",
+            reason="pagefile/hiberfil/swapfile 由 Windows 管理，直接删除会导致系统异常。",
+            action="不要手动删除；如需释放空间，通过系统设置调整虚拟内存或关闭休眠。",
+        )
+
+    if path_matches_any_prefix(path, RISKY_SYSTEM_PREFIXES):
         return Insight(
             path=path,
             size=size,
@@ -791,7 +1025,18 @@ def classify_path(path: Path, size: int, kind: str) -> Insight:
             risk="risky",
             category="系统或受管目录",
             reason="路径位于系统、应用或受管区域，清理风险高。",
-            action="不要直接删除；只通过系统设置或对应应用管理。",
+            action="不要直接删除；只通过系统设置、应用自带卸载或磁盘清理工具管理。",
+        )
+
+    if "windows.old" in parts:
+        return Insight(
+            path=path,
+            size=size,
+            kind=kind,
+            risk="review",
+            category="Windows 旧系统残留",
+            reason="Windows.old 是升级后的旧系统备份，通常很大，确认新系统稳定后可通过磁盘清理删除。",
+            action="确认当前 Windows 运行正常后，用「磁盘清理 → 以前的 Windows 安装」删除，不要手动乱删。",
         )
 
     if parts & DEV_CACHE_NAMES:
@@ -805,6 +1050,17 @@ def classify_path(path: Path, size: int, kind: str) -> Insight:
             action="确认项目不在运行后，可优先清理或通过包管理器重建。",
         )
 
+    if looks_like_windows_temp_or_cache(path, parts):
+        return Insight(
+            path=path,
+            size=size,
+            kind=kind,
+            risk="safe",
+            category="临时文件/应用缓存",
+            reason="命中 Temp、Cache、CrashDumps 等常见可清理区域。",
+            action="关闭相关应用后清理；优先用系统「磁盘清理」或应用内清理，避免删正在使用的文件。",
+        )
+
     if looks_like_backup(path):
         return Insight(
             path=path,
@@ -813,18 +1069,29 @@ def classify_path(path: Path, size: int, kind: str) -> Insight:
             risk="review",
             category="历史备份/归档",
             reason="名称看起来像备份、旧版本或归档文件。",
-            action="确认是否已有更新备份，再移动到废纸篓或外置存储。",
+            action="确认是否已有更新备份，再移动到回收站或外置存储。",
         )
 
-    if suffix in ARCHIVE_SUFFIXES:
+    if suffix in VIRTUAL_DISK_SUFFIXES:
         return Insight(
             path=path,
             size=size,
             kind=kind,
             risk="review",
-            category="压缩包/镜像",
-            reason="大压缩包或镜像通常是下载残留、安装包或一次性传输文件。",
-            action="确认来源和是否已解压使用，再决定是否清理。",
+            category="虚拟磁盘/容器镜像",
+            reason="VHDX/VHD 等通常是 WSL、虚拟机或应用沙箱磁盘，体积大且删错会丢环境。",
+            action="确认对应发行版/虚拟机是否还在用；WSL 可用 wsl --unregister，虚拟机请在管理器中删除。",
+        )
+
+    if looks_like_installer_package(path) or suffix in ARCHIVE_SUFFIXES:
+        return Insight(
+            path=path,
+            size=size,
+            kind=kind,
+            risk="review",
+            category="压缩包/安装包/镜像",
+            reason="大压缩包、安装包或镜像通常是下载残留、安装介质或一次性传输文件。",
+            action="确认来源、是否已安装/解压使用，再决定是否清理。",
         )
 
     if suffix in MEDIA_SUFFIXES:
@@ -869,6 +1136,18 @@ def classify_path(path: Path, size: int, kind: str) -> Insight:
             category="下载目录残留",
             reason="下载目录常见临时安装包、素材和传输文件。",
             action="按文件名和修改时间确认是否仍需要。",
+        )
+
+    # Windows 用户配置里常见大户：LocalAppData 下未识别内容仍需确认
+    if IS_WINDOWS and {"appdata", "local", "locallow", "roaming"} & parts:
+        return Insight(
+            path=path,
+            size=size,
+            kind=kind,
+            risk="review",
+            category="应用数据(AppData)",
+            reason="AppData 存放应用配置、缓存与本地数据，体积大但删错会导致应用重置或丢失数据。",
+            action="先确认所属应用；优先在应用内清理缓存，不要整目录删除。",
         )
 
     return Insight(
@@ -1091,9 +1370,35 @@ def run_explain(args: argparse.Namespace) -> int:
     return 0
 
 
-def select_plan_items(insights: list[Insight], target_bytes: int) -> tuple[list[Insight], int]:
+def is_too_coarse_for_plan(path: Path, root: Path) -> bool:
+    """过滤过粗的目录，避免计划直接建议删整个 AppData/用户目录。"""
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        relative = path
+    parts = relative.parts
+    if not parts:
+        return True
+    # 扫描根下一层目录整体通常太大、太含糊
+    if len(parts) <= 1:
+        return True
+    if IS_WINDOWS:
+        lower_parts = [part.lower() for part in parts]
+        if lower_parts[0] == "appdata" and len(lower_parts) <= 2:
+            return True
+        if lower_parts[0] in {"local settings", "application data"} and len(lower_parts) <= 2:
+            return True
+    return False
+
+
+def select_plan_items(insights: list[Insight], target_bytes: int, root: Path) -> tuple[list[Insight], int]:
+    candidates = [
+        item
+        for item in insights
+        if item.risk != "risky" and not is_too_coarse_for_plan(item.path, root)
+    ]
     ordered = sorted(
-        [item for item in insights if item.risk != "risky"],
+        candidates,
         key=lambda item: (0 if item.risk == "safe" else 1, -item.size),
     )
     selected: list[Insight] = []
@@ -1133,7 +1438,7 @@ def run_plan(args: argparse.Namespace) -> int:
         f"Scai 正在扫描 {root}",
         lambda: create_space_analysis(root=root, limit=args.limit, include_all=args.all, max_depth=None),
     )
-    selected, total = select_plan_items(analysis.insights, target)
+    selected, total = select_plan_items(analysis.insights, target, root=root)
 
     print(f"Scai Reclaim Plan: {human_size(target)}")
     print()
@@ -1155,7 +1460,8 @@ def run_plan(args: argparse.Namespace) -> int:
     print(f"预计可处理空间: {human_size(total)}")
     if total < target:
         print("提示: 当前候选项不足以达到目标，可以扩大扫描范围或使用 --all。")
-    print("安全策略: 后续执行清理时应默认移动到废纸篓，并记录操作日志。")
+    trash_name = "回收站" if IS_WINDOWS else "废纸篓"
+    print(f"安全策略: 后续执行清理时应默认移动到{trash_name}，并记录操作日志。Scai 本身不会删除任何文件。")
     return 0
 
 
@@ -1534,7 +1840,8 @@ class ScaiTui:
         self.safe_addstr(stdscr, 0, 0, title.ljust(width - 1), self.color(1) or curses.A_REVERSE)
         root_text = f"路径: {self.root}"
         self.safe_addstr(stdscr, 1, 0, truncate_middle(root_text, width - 1), self.color(2))
-        keys = "q退出  r刷新  f文件  d目录  /路径  c全盘  h用户目录  +/-数量  a排除开关  ?帮助"
+        computer_hint = "c系统盘" if IS_WINDOWS else "c全盘"
+        keys = f"q退出  r刷新  f文件  d目录  /路径  {computer_hint}  h启动目录  +/-数量  a排除开关  ?帮助"
         self.safe_addstr(stdscr, 2, 0, truncate_middle(keys, width - 1))
 
     def draw_body(self, stdscr: curses.window, height: int, width: int) -> None:
@@ -1628,7 +1935,7 @@ class ScaiTui:
             "帮助",
             "j/k 或 ↑/↓ 滚动，PageUp/PageDown 快速滚动",
             "f 文件模式，d 文件夹模式，r 重新扫描",
-            "/ 输入路径，c 扫描电脑根目录，h 回到启动目录，. 当前目录",
+            f"/ 输入路径，c 扫描电脑根目录({COMPUTER_SCAN_ROOT})，h 回到启动目录，. 当前目录",
             "+/- 调整 Top 数量，a 切换默认排除，[/] 调整目录深度",
             "q 退出，? 关闭帮助",
         ]
@@ -1674,12 +1981,12 @@ def add_common_args(parser: argparse.ArgumentParser, help_text: str, default_lim
     parser.add_argument(
         "--all",
         action="store_true",
-        help="不跳过默认排除目录。注意：scai all 表示从 / 开始安全扫描，不等于 --all。",
+        help="不跳过默认排除目录。注意：scai all 表示全盘安全扫描，不等于 --all。",
     )
     parser.add_argument(
         "--computer",
         action="store_true",
-        help="从电脑根目录 / 开始安全扫描；默认仍会跳过系统和缓存目录。",
+        help=f"从电脑根目录（{COMPUTER_SCAN_ROOT}）开始安全扫描；默认仍会跳过系统和缓存目录。",
     )
 
 
@@ -1699,7 +2006,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "核心用法:\n"
             "  scai                 输出 Space Brief 智能概览\n"
-            "  scai all             从电脑根目录 / 开始安全扫描\n"
+            f"  scai all             从电脑根目录 {COMPUTER_SCAN_ROOT} 开始安全扫描\n"
             "  scai top             查看最大文件\n"
             "  scai more            显示更多 Top 文件\n"
             "  scai dirs            查看最大文件夹\n"
@@ -1707,6 +2014,15 @@ def build_parser() -> argparse.ArgumentParser:
             "  scai explain PATH    解释某个文件或目录\n"
             "  scai plan 20g        生成释放空间方案\n"
             "  scai ai              调用 Codex CLI 生成 AI 诊断\n"
+            + (
+                "\nWindows 示例:\n"
+                "  scai C:\\Users\\你的用户名\n"
+                "  scai top C:\\ --limit 50\n"
+                "  scai plan 20g C:\\Users\\你的用户名\n"
+                "  scai explain C:\\Users\\你的用户名\\Downloads\\大文件.zip\n"
+                if IS_WINDOWS
+                else ""
+            )
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1886,7 +2202,18 @@ def run_dirs(args: argparse.Namespace) -> int:
 
 
 def run_tui(args: argparse.Namespace) -> int:
-    locale.setlocale(locale.LC_ALL, "")
+    if curses is None:
+        print(
+            "TUI 不可用：当前 Python 未提供 curses 模块。\n"
+            "Windows 可执行: pip install windows-curses\n"
+            "或改用 CLI: scai / scai top / scai dirs / scai plan / scai explain",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        locale.setlocale(locale.LC_ALL, "")
+    except locale.Error:
+        pass
     app = ScaiTui(args)
     return curses.wrapper(app.run)
 
@@ -1900,6 +2227,7 @@ def should_use_tui(program_name: str, force_tui: bool, force_plain: bool) -> boo
 
 
 def main() -> int:
+    enable_windows_ansi()
     program_name = os.environ.get("SCAI_PROG", "scai")
     parser = build_parser()
     raw_args, force_tui, force_plain = split_interface_args(sys.argv[1:])

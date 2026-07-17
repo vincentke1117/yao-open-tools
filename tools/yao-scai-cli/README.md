@@ -19,11 +19,13 @@ Scai is not meant to be only another `du` wrapper. The goal is to scan disk usag
 - Optional AI diagnosis through the official `codex exec` CLI when available.
 - Terminal-friendly AI Markdown rendering for headings, emphasis, lists, links, and code blocks.
 - Plain table output for largest files and folders.
-- No third-party runtime dependency; the TUI uses Python standard library `curses`.
+- No third-party runtime dependency on macOS/Linux; the TUI uses Python standard library `curses`.
+- Windows support: CLI works with stock Python; TUI optionally needs `windows-curses`.
+- Windows-aware risk rules for `C:\Windows`, `Program Files`, `AppData`, Temp caches, installers, `pagefile.sys` / `hiberfil.sys`, and `Windows.old`.
 
 ## Install
 
-From this tool directory, run:
+### macOS / Linux
 
 ```bash
 ./install.sh
@@ -37,11 +39,43 @@ The installer creates or updates these commands in `$HOME/bin`:
 
 Make sure `$HOME/bin` is in your `PATH`.
 
+### Windows
+
+Requirements: Python 3 on `PATH` (`python` or `py -3`).
+
+From this tool directory in PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Or double-click / run:
+
+```bat
+install.cmd
+```
+
+This creates `%USERPROFILE%\bin\scai.cmd` (plus `bf.cmd` / `scan.cmd`) and adds `%USERPROFILE%\bin` to your user `PATH` if needed. Open a **new** terminal after install.
+
+Optional TUI support:
+
+```powershell
+python -m pip install windows-curses
+```
+
+Without install, you can always run:
+
+```powershell
+python .\scai.py --help
+python .\scai.py $env:USERPROFILE
+python .\scai.py plan 20g $env:USERPROFILE
+```
+
 ## Core Commands
 
 ```bash
 scai              # Space Brief for the current directory
-scai all          # safe full-computer scan from /
+scai all          # safe full-computer scan (C:\ on Windows, / elsewhere)
 scai top          # largest files
 scai more         # show more largest files, default Top 100
 scai more 200     # show Top 200 largest files
@@ -51,6 +85,19 @@ scai explain PATH # explain one file or folder
 scai plan 20g     # generate a reclaim plan
 scai ai           # ask Codex CLI to analyze the scan summary
 ```
+
+### Windows cleanup examples
+
+```powershell
+scai C:\Users\你的用户名
+scai top C:\Users\你的用户名 --limit 50
+scai dirs C:\Users\你的用户名 --max-depth 2
+scai plan 20g C:\Users\你的用户名
+scai explain C:\Users\你的用户名\Downloads\big-setup.exe
+scai all
+```
+
+`scai all` on Windows scans the system drive (`C:\` by default) while skipping system-managed trees such as `Windows`, `Program Files`, and `ProgramData`. Scai **never deletes files**; it only explains risk and builds a reclaim plan.
 
 Short forms still work:
 
