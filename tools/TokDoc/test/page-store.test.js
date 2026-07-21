@@ -843,6 +843,7 @@ test('builds a public page list with type filters and public-only fields', async
   assert.deepEqual(all.stats, { all: 2, html: 1, markdown: 0, pdf: 1, word: 0, presentation: 0, keynote: 0, spreadsheet: 0 });
   assert.equal(all.pages.some((page) => page.slug === privatePage.slug), false);
   assert.equal(all.pages[0].url.startsWith('/'), true);
+  assert.equal(all.pages[0].downloadUrl, `${all.pages[0].url}/download`);
   assert.equal(Object.hasOwn(all.pages[0], 'id'), false);
   assert.equal(Object.hasOwn(all.pages[0], 'sourcePath'), false);
   assert.equal(Object.hasOwn(all.pages[0], 'generatedPath'), false);

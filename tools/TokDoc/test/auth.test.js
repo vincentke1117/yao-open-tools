@@ -725,6 +725,16 @@ test('serves uploaded PDF documents publicly and blocks edit mode for non-HTML a
   assert.match(publicView.headers['content-type'], /application\/pdf/);
   assert.match(publicView.headers['content-disposition'], /inline/);
   assert.match(publicView.body, /^%PDF-1\.4/);
+  assert.equal(app.store.getPage(page.id).accessCount, 1);
+  assert.equal(app.store.getPage(page.id).downloadCount, 0);
+
+  const publicDownload = await app.inject({ method: 'GET', url: `${page.url}/download` });
+  assert.equal(publicDownload.statusCode, 200);
+  assert.match(publicDownload.headers['content-type'], /application\/pdf/);
+  assert.match(publicDownload.headers['content-disposition'], /attachment/);
+  assert.match(publicDownload.body, /^%PDF-1\.4/);
+  assert.equal(app.store.getPage(page.id).accessCount, 1);
+  assert.equal(app.store.getPage(page.id).downloadCount, 1);
 
   const login = await app.inject({
     method: 'POST',
@@ -740,12 +750,59 @@ test('serves uploaded PDF documents publicly and blocks edit mode for non-HTML a
   assert.match(downloaded.headers['content-type'], /application\/pdf/);
   assert.match(downloaded.headers['content-disposition'], /attachment/);
   assert.match(downloaded.body, /^%PDF-1\.4/);
-  assert.equal(app.store.getPage(page.id).downloadCount, 1);
+  assert.equal(app.store.getPage(page.id).downloadCount, 2);
 
   const editDenied = await app.inject({ method: 'GET', url: `${page.url}?edit=1`, headers: { cookie: sessionCookie(login) } });
   assert.equal(editDenied.statusCode, 400);
   assert.equal(editDenied.json().error, 'Document assets cannot be edited online');
   assert.doesNotMatch(editDenied.body, /tokdoc-edit-panel/);
+});
+
+test('counts public downloads and keeps private downloads behind login', async (t) => {
+  const { app, dataDir } = await createApp();
+  t.after(async () => {
+    await app.close();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  const publicPage = await app.store.importBuffer({
+    fileName: 'public-download.html',
+    relativePath: 'public-download.html',
+    buffer: Buffer.from('<!doctype html><html><head><title>公开下载</title></head><body><h1>公开下载</h1></body></html>'),
+  });
+  const privatePage = await app.store.importBuffer({
+    fileName: 'private-download.html',
+    relativePath: 'private-download.html',
+    buffer: Buffer.from('<!doctype html><html><head><title>私有下载</title></head><body><h1>私有下载</h1></body></html>'),
+    visibility: 'private',
+  });
+
+  const publicDownload = await app.inject({ method: 'GET', url: `${publicPage.url}/download` });
+  assert.equal(publicDownload.statusCode, 200);
+  assert.match(publicDownload.headers['content-disposition'], /attachment/);
+  assert.match(publicDownload.headers['content-type'], /text\/html/);
+  assert.equal(app.store.getPage(publicPage.id).downloadCount, 1);
+
+  const legacyPublicDownload = await app.inject({ method: 'GET', url: `/pages/${publicPage.slug}/download` });
+  assert.equal(legacyPublicDownload.statusCode, 200);
+  assert.equal(app.store.getPage(publicPage.id).downloadCount, 2);
+
+  const deniedPrivateDownload = await app.inject({ method: 'GET', url: `${privatePage.url}/download` });
+  assert.equal(deniedPrivateDownload.statusCode, 404);
+  assert.equal(app.store.getPage(privatePage.id).downloadCount, 0);
+
+  const login = await app.inject({
+    method: 'POST',
+    url: '/api/login',
+    payload: { username: 'admin', password: 'tokdoc' },
+  });
+  const privateDownload = await app.inject({
+    method: 'GET',
+    url: `${privatePage.url}/download`,
+    headers: { cookie: sessionCookie(login) },
+  });
+  assert.equal(privateDownload.statusCode, 200);
+  assert.equal(app.store.getPage(privatePage.id).downloadCount, 1);
 });
 
 test('serves generated documents when stored paths still point to Docker data directories', async (t) => {

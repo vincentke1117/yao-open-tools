@@ -109,6 +109,10 @@ test('defines a standalone public document index page', async () => {
   assert.match(html, /id="sortSelect"/);
   assert.match(html, /id="docRows"/);
   assert.match(html, /id="docCards"/);
+  assert.match(html, /<th>操作<\/th>/);
+  assert.doesNotMatch(html, /<th>目录<\/th>/);
+  assert.doesNotMatch(html, /搜索标题、文件名、目录或短链接/);
+  assert.match(html, /\.doc-actions\s*\{/);
   assert.match(html, /https:\/\/github\.com\/yaojingang\/yao-open-tools\/tree\/main\/tools\/TokDoc/);
   assert.match(html, /开源地址/);
   assert.doesNotMatch(html, />访问次数</);
@@ -123,6 +127,10 @@ test('opens public documents in a new tab and defaults public pagination to 10',
   assert.match(script, /pageSize:\s*10/);
   assert.match(script, /target="_blank"/);
   assert.match(script, /rel="noopener noreferrer"/);
+  assert.match(script, /downloadUrl/);
+  assert.match(script, /\/download/);
+  assert.match(script, /class="open-btn download-btn"/);
+  assert.doesNotMatch(script, /directoryName/);
   assert.match(script, /window\.open\(row\.dataset\.url, '_blank', 'noopener,noreferrer'\)/);
   assert.doesNotMatch(script, /accessCount/);
   assert.doesNotMatch(script, /次访问/);

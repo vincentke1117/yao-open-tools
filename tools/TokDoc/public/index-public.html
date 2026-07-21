@@ -322,7 +322,7 @@
 
       table {
         width: 100%;
-        min-width: 780px;
+        min-width: 800px;
         border-collapse: collapse;
       }
 
@@ -458,6 +458,17 @@
 
       .open-btn {
         color: var(--accent);
+      }
+
+      .doc-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+      }
+
+      .download-btn {
+        color: var(--ink-soft);
       }
 
       .cards {
@@ -632,6 +643,12 @@
           min-width: 0;
         }
 
+        .doc-actions {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          width: 100%;
+        }
+
         .open-btn {
           width: 100%;
         }
@@ -690,7 +707,7 @@
       <section class="index-head" aria-label="文档索引">
         <div>
           <h1 class="section-title">文档索引</h1>
-          <p class="section-note" id="listNote">这里汇总管理员上传并发布的文档。可以按类型筛选，也可以直接搜索标题、文件名、目录或短链接。</p>
+          <p class="section-note" id="listNote">这里汇总管理员上传并发布的文档。可以按类型筛选，也可以直接搜索标题、文件名或短链接。</p>
           <div class="stats-line" id="statsLine" aria-live="polite">
             <span>全部 <strong>0</strong></span>
             <span>HTML <strong>0</strong></span>
@@ -708,7 +725,7 @@
             <circle cx="11" cy="11" r="8"></circle>
             <path d="m21 21-4.3-4.3"></path>
           </svg>
-          <input id="searchInput" type="search" placeholder="搜索标题、文件名、目录或短链接" autocomplete="off" />
+          <input id="searchInput" type="search" placeholder="搜索标题、文件名或短链接" autocomplete="off" />
         </label>
       </section>
 
@@ -739,10 +756,9 @@
               <tr>
                 <th>类型</th>
                 <th>标题</th>
-                <th>目录</th>
                 <th>上传时间</th>
                 <th>大小</th>
-                <th>打开</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody id="docRows"></tbody>

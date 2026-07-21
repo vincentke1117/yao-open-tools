@@ -174,6 +174,7 @@ function publicPageSummary(page) {
     uploadTime: page.uploadTime,
     updatedTime: page.updatedTime,
     url: page.url,
+    downloadUrl: `${page.url}/download`,
   };
 }
 

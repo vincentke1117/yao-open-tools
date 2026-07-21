@@ -187,6 +187,7 @@ function requestAccessState(app, request) {
   const usingDefaultAdminPath = adminPath === defaultAdminPath;
   const isPublicPageView = pathname.startsWith('/pages/') && url.searchParams.get('edit') !== '1';
   const isPublicShortPageView = /^\/[a-z0-9]{6}$/.test(pathname) && url.searchParams.get('edit') !== '1';
+  const isPublicShortPageDownload = /^\/[a-z0-9]{6}\/download$/i.test(pathname);
   if (pathname === '/healthz' || pathname === '/favicon.ico' || pathname.startsWith('/assets/') || pathname.startsWith('/page-assets/')) return 'public';
   if (isPublicListPath(pathname)) return 'public';
   if (pathname === '/admin' || pathname === '/admin/') return usingDefaultAdminPath ? 'public' : 'not-found';
@@ -201,8 +202,12 @@ function requestAccessState(app, request) {
     if (!isActiveAdminApiPath(pathname, adminPath)) return 'not-found';
     return publicApiSuffix(pathname, adminPath) ? 'public' : 'protected';
   }
-  if (isPublicShortPageView || isPublicPageView) return 'public';
+  if (isPublicShortPageView || isPublicPageView || isPublicShortPageDownload) return 'public';
   return 'protected';
+}
+
+function downloadFileNameForPage(page, filePath) {
+  return path.basename(filePath || page.generatedPath || page.fileName || 'document');
 }
 
 async function sendGeneratedPage(app, request, reply, rawSlug) {
@@ -227,6 +232,23 @@ async function sendGeneratedPage(app, request, reply, rawSlug) {
   const html = await app.store.readPageHtml(page);
   const output = request.query?.edit === '1' && isEditableFileType(page.fileType, page.mimeType) ? injectEditBridge(page, html, app.store.getAdminPath()) : html;
   return reply.header('cache-control', 'no-store').type('text/html; charset=utf-8').send(output);
+}
+
+async function sendGeneratedDownload(app, request, reply, rawSlug) {
+  const slug = String(rawSlug || '').replace(/\.html?$/i, '');
+  if (!/^[a-z0-9]{6}$/.test(slug)) return sendNotFound(reply, 'Page not found');
+  const page = app.store.getActivePageBySlug(slug);
+  if (!page) return sendNotFound(reply, 'Page not found');
+  const session = currentSession(app, request);
+  if (page.visibility === 'private' && !session) return sendNotFound(reply, 'Page not found');
+  const filePath = await app.store.resolveGeneratedPath(page);
+  const buffer = await app.store.readPageFile(page);
+  app.store.incrementDownloadCount(page.id);
+  return reply
+    .header('cache-control', 'no-store')
+    .header('content-disposition', attachmentContentDisposition(downloadFileNameForPage(page, filePath)))
+    .type(page.mimeType || 'application/octet-stream')
+    .send(buffer);
 }
 
 function currentSession(app, request) {
@@ -332,7 +354,7 @@ function registerApiRoutes(app, prefix = '') {
     app.store.incrementDownloadCount(page.id);
     return reply
       .header('cache-control', 'no-store')
-      .header('content-disposition', attachmentContentDisposition(path.basename(filePath || page.generatedPath || page.fileName)))
+      .header('content-disposition', attachmentContentDisposition(downloadFileNameForPage(page, filePath)))
       .type(page.mimeType || 'application/octet-stream')
       .send(buffer);
   });
@@ -598,6 +620,10 @@ export function registerRoutes(app) {
     return sendGeneratedPage(app, request, reply, request.params.slug);
   });
 
+  app.get('/pages/:slug/download', async (request, reply) => {
+    return sendGeneratedDownload(app, request, reply, request.params.slug);
+  });
+
   app.get('/:slug/', async (request, reply) => {
     if (isActiveAdminPath(`/${request.params.slug}`, app.store.getAdminPath())) return sendAdmin(app, reply);
     return sendNotFound(reply, 'Page not found');
@@ -611,6 +637,11 @@ export function registerRoutes(app) {
   app.get('/:slug/settings/', async (request, reply) => {
     if (isActiveAdminPath(`/${request.params.slug}`, app.store.getAdminPath())) return sendAdmin(app, reply);
     return sendNotFound(reply, 'Page not found');
+  });
+
+  app.get('/:slug/download', async (request, reply) => {
+    if (isActiveAdminPath(`/${request.params.slug}`, app.store.getAdminPath())) return sendNotFound(reply, 'Page not found');
+    return sendGeneratedDownload(app, request, reply, request.params.slug);
   });
 
   app.get('/:slug', async (request, reply) => {
