@@ -80,7 +80,7 @@ To package Scai into a single `scai.exe` that needs no Python on the target mach
 python .\build_exe.py
 ```
 
-The build script creates an isolated `.venv-build`, installs PyInstaller (plus `windows-curses`, so the TUI works out of the box) and produces two fully portable single-file executables: `dist\scai.exe` (console CLI/TUI, about 12 MB) and `dist\scai-gui.exe` (windowed GUI, about 12 MB, double-click to launch). No installation or Python is needed on the target machine — copy them to any folder (or a USB stick) and run. Optionally put them on `PATH`, e.g. `%USERPROFILE%\bin`.
+The build script creates an isolated `.venv-build`, installs PyInstaller, `windows-curses` and `pywebview`, and produces two fully portable single-file executables: `dist\scai.exe` (console CLI/TUI, about 8 MB) and `dist\scai-gui.exe` (Web GUI rendered with the system WebView2 runtime, about 18 MB, double-click to launch; falls back to the legacy tkinter UI if WebView2 is missing). No installation or Python is needed on the target machine — copy them to any folder (or a USB stick) and run. Optionally put them on `PATH`, e.g. `%USERPROFILE%\bin`.
 
 If the default PyPI is slow, point the build at a mirror:
 
@@ -196,28 +196,19 @@ The bottom panel follows the current selection and shows available metadata such
 
 ## GUI
 
-`scai gui` (or double-click `scai-gui.exe`) opens a windowed interface for human-driven cleanup:
+`scai gui` (or double-click `scai-gui.exe`) opens a modern windowed interface for human-driven cleanup, rebuilt 1:1 from the high-fidelity mockups in `docs/ui参考/` (pywebview + local HTML; falls back to the legacy tkinter UI when WebView2 is unavailable):
+
+- **Empty state**: welcome screen with the last scanned directory prefilled and the last scan date.
+- **Scanning state**: live directory/file counters, elapsed time, and a cancel button.
+- **Result state**: three overview cards (root total / safely reclaimable / needs review), risk filter tabs with live counts, a file table with pill-style risk badges (high-risk rows show a lock and cannot be checked), a clickable treemap of directory sizes, and a detail panel explaining every judgement.
+- **Decision bar**: deduplicated selection summary, target-based auto-check (e.g. `20g`), AI prompt window (copy a diagnosis prompt with the JSON summary to any AI chat — the GUI never calls an AI service), open-location, open-log, and the single green primary action: move to Recycle Bin.
+- **Safety model unchanged**: deletion always goes to the Recycle Bin / Trash (never permanent, the word itself never appears), risky items are locked server-side and client-side, every action is appended to `~/.scai/cleanup-log.jsonl`.
+- Light/dark themes; the window is fully offline.
 
 ```bash
 scai gui
 scai gui ~/Downloads
 ```
-
-Workflow: pick a directory (or use 全盘扫描) → scan → browse results color-coded by risk (green = rebuildable caches, amber = needs confirmation, red = system-managed, locked) → check items → 删除所选. The selection summary shows the deduplicated total (parent folders absorb their checked children).
-
-Extra actions:
-
-- 按目标勾选: enter a target like `20g` or `500m` and auto-check a plan (safe items first, coarse folders filtered out) for human review before deletion.
-- AI 提示词: generates a copyable diagnosis prompt containing the JSON scan summary — paste it into any AI chat (ChatGPT / Claude / Gemini / ...). The GUI never calls an AI service itself; the CLI `scai ai` still offers direct Codex diagnosis.
-- 打开位置 / double-click a row: reveal the item in Explorer/Finder/file manager.
-- The GUI remembers the last scanned directory (`~/.scai/gui-state.json`). Double-clicking `scai-gui.exe` opens with that directory preloaded — it never scans the exe's own folder.
-
-Safety model:
-
-- Deletion always moves items to the Recycle Bin / Trash (never permanent). Restoring is possible from the Recycle Bin.
-- `risky` items (system paths, `pagefile.sys`, ...) cannot be checked.
-- A confirmation dialog lists every target before anything happens.
-- Every action is appended to `~/.scai/cleanup-log.jsonl` (path, size, risk, result, error). Use 打开日志 to inspect it.
 
 ## Agent Skill
 
@@ -280,3 +271,7 @@ scan --tui ~/Downloads
 ```
 
 `scai --plain PATH 30` maps to the old table-style top-file output.
+
+---
+
+Scai is built by **Koding Studio**. Homepage and social links: coming soon (branding hooks are prepared in `scai_gui_web.py` via `APP_MAKER` / `APP_HOMEPAGE`).

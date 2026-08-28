@@ -330,6 +330,18 @@ class ScanStats:
     scanned_dirs: int = 0
     skipped_dirs: int = 0
     skipped_entries: int = 0
+    # 仅目录扫描填充：根目录聚合信息（供 GUI 总览卡片使用）
+    root_size: int = 0
+    root_file_count: int = 0
+
+
+class ScanCancelled(RuntimeError):
+    """扫描被用户取消（通过 cancel_check 触发）。"""
+
+
+def _check_scan_cancel(cancel_check) -> None:
+    if cancel_check is not None and cancel_check():
+        raise ScanCancelled("扫描已取消")
 
 
 @dataclass
@@ -425,12 +437,20 @@ def push_top_record(heap: list[object], record: object, limit: int) -> None:
         heapq.heapreplace(heap, record)
 
 
-def scan_top_files(root: Path, limit: int, include_all: bool) -> tuple[list[FileRecord], ScanStats]:
+def scan_top_files(
+    root: Path,
+    limit: int,
+    include_all: bool,
+    progress_cb=None,
+    cancel_check=None,
+) -> tuple[list[FileRecord], ScanStats]:
     stats = ScanStats()
     heap: list[FileRecord] = []
 
     if root.is_file():
         stat = root.stat()
+        stats.root_size = stat.st_size
+        stats.root_file_count = 1
         push_top_record(
             heap,
             FileRecord(size=stat.st_size, mtime=stat.st_mtime, sort_path=str(root), path=root),
@@ -442,6 +462,7 @@ def scan_top_files(root: Path, limit: int, include_all: bool) -> tuple[list[File
     stack = [root]
     while stack:
         current = stack.pop()
+        _check_scan_cancel(cancel_check)
         try:
             with os.scandir(current) as iterator:
                 stats.scanned_dirs += 1
@@ -480,6 +501,8 @@ def scan_top_files(root: Path, limit: int, include_all: bool) -> tuple[list[File
                         stats.skipped_entries += 1
         except (FileNotFoundError, NotADirectoryError, PermissionError, OSError):
             stats.skipped_entries += 1
+        if progress_cb is not None:
+            progress_cb(stats)
 
     return sorted(heap, reverse=True), stats
 
@@ -489,6 +512,8 @@ def scan_top_dirs(
     limit: int,
     include_all: bool,
     max_depth: int | None = None,
+    progress_cb=None,
+    cancel_check=None,
 ) -> tuple[list[DirectoryRecord], ScanStats]:
     stats = ScanStats()
     visit_order: list[Path] = []
@@ -503,6 +528,7 @@ def scan_top_dirs(
     stack = [(root, 0)]
     while stack:
         current, current_depth = stack.pop()
+        _check_scan_cancel(cancel_check)
         visit_order.append(current)
         depth_map[current] = current_depth
         children: list[Path] = []
@@ -546,12 +572,16 @@ def scan_top_dirs(
             direct_sizes[current] = direct_size
             direct_mtimes[current] = direct_mtime
             direct_file_counts[current] = direct_file_count
+            if progress_cb is not None:
+                progress_cb(stats)
             continue
 
         children_map[current] = children
         direct_sizes[current] = direct_size
         direct_mtimes[current] = direct_mtime
         direct_file_counts[current] = direct_file_count
+        if progress_cb is not None:
+            progress_cb(stats)
 
     for current in reversed(visit_order):
         total_size = direct_sizes[current]
@@ -573,9 +603,11 @@ def scan_top_dirs(
         )
         aggregated[current] = current_record
 
-        current_depth = depth_map[current]
         if current == root:
+            stats.root_size = total_size
+            stats.root_file_count = total_file_count
             continue
+        current_depth = depth_map[current]
         if max_depth is not None and current_depth > max_depth:
             continue
         push_top_record(heap, current_record, limit)
@@ -1180,12 +1212,32 @@ def aggregate_insights(insights: list[Insight], risk: str | None = None) -> list
     return sorted(totals.items(), key=lambda item: item[1], reverse=True)
 
 
-def create_space_analysis(root: Path, limit: int, include_all: bool, max_depth: int | None = 1) -> SpaceAnalysis:
+def create_space_analysis(
+    root: Path,
+    limit: int,
+    include_all: bool,
+    max_depth: int | None = 1,
+    progress_cb=None,
+    cancel_check=None,
+) -> SpaceAnalysis:
     start = time.time()
     dir_limit = max(8, limit)
     file_limit = max(DEFAULT_ANALYSIS_LIMIT, limit)
-    dirs, dir_stats = scan_top_dirs(root=root, limit=dir_limit, include_all=include_all, max_depth=max_depth)
-    files, file_stats = scan_top_files(root=root, limit=file_limit, include_all=include_all)
+    dirs, dir_stats = scan_top_dirs(
+        root=root,
+        limit=dir_limit,
+        include_all=include_all,
+        max_depth=max_depth,
+        progress_cb=progress_cb,
+        cancel_check=cancel_check,
+    )
+    files, file_stats = scan_top_files(
+        root=root,
+        limit=file_limit,
+        include_all=include_all,
+        progress_cb=progress_cb,
+        cancel_check=cancel_check,
+    )
     insights = build_insights([*dirs, *files])
     return SpaceAnalysis(
         root=root,
@@ -2076,7 +2128,7 @@ def build_parser() -> argparse.ArgumentParser:
     ai_parser.add_argument("--timeout", type=int, default=180, help="Codex 分析超时时间，默认 180 秒。")
 
     gui_parser = subparsers.add_parser("gui", help="打开图形界面：扫描、查看建议、勾选后移动到回收站。")
-    add_common_args(gui_parser, "启动时扫描的根目录，默认是当前目录。", default_limit=200)
+    add_common_args(gui_parser, "启动时扫描的根目录，默认是当前目录。", default_limit=500)
 
     return parser
 
@@ -2242,15 +2294,22 @@ def run_tui(args: argparse.Namespace) -> int:
 def run_gui(args: argparse.Namespace) -> int:
     root = COMPUTER_SCAN_ROOT if args.computer else Path(args.root).expanduser().resolve()
     try:
-        import scai_gui
-    except ImportError as exc:
+        import scai_gui_web
+    except ImportError:
         print(
-            f"GUI 不可用：加载图形模块失败 ({exc})。\n"
-            "Linux 可尝试安装 python3-tk；或改用 CLI: scai / scai top / scai dirs / scai plan",
+            "图形界面模块未随本程序打包。请使用 scai-gui.exe 打开图形界面，"
+            "或从源码运行: python scai.py gui",
             file=sys.stderr,
         )
         return 2
-    return scai_gui.launch(root_path=root, include_all=args.all, limit=args.limit)
+    code = scai_gui_web.launch(root_path=root, include_all=args.all, limit=args.limit)
+    if code == 3:
+        # Web 运行时缺失（无 WebView2 等），回退旧 tkinter 界面
+        print("正在回退到基础图形界面…", file=sys.stderr)
+        import scai_gui
+
+        return scai_gui.launch(root_path=root, include_all=args.all, limit=min(args.limit, 200), auto_scan=False)
+    return code
 
 
 def should_use_tui(program_name: str, force_tui: bool, force_plain: bool) -> bool:

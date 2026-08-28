@@ -96,9 +96,11 @@ scai_gui_main.py       # 改：入口走 scai_gui_web；WebView2 缺失时回退
 - 便携回归：zip 解压到全新目录运行两 exe；
 - 性能：500 条 limit 下扫描→渲染 < 1s（不含扫描本身）；treemap 60fps 悬停。
 
-## 7. 待拍板决策点
+## 7. 待拍板决策点（已于 2026-08-28 全部定案，按推荐执行）
 
-1. 技术栈：**B（pywebview，推荐）** 还是备选 A（customtkinter）？
-2. 侧边栏：确认本期不做（推荐），还是要求按扫描中稿实现纯导航壳（无新增功能，仅视觉）？
-3. 暗色主题：本期交付（推荐，成本已含在 P5）还是砍掉后再排？
-4. treemap：按 P5 自绘 SVG 交付（推荐），还是接受本期先上"按风险堆叠条"简化版、treemap 延后？
+1. 技术栈：**B（pywebview + HTML/CSS/JS）** ✅ 已实施。
+2. 侧边栏：**本期不做**，单窗体三段式布局 ✅。
+3. 暗色主题：**本期交付**（CSS 变量实现，偏好持久化）✅。
+4. treemap：**自绘 SVG squarified treemap**（点击联动列表）✅。
+
+实施结果：`scai_gui_web.py` + `web/`（index.html / style.css / app.js / treemap.js / icons.js）；引擎侧新增进度回调、可取消扫描、根目录总量（`scai.py`，CLI 行为不变）；WebView2 缺失时自动回退旧 tkinter 界面。品牌：Koding Studio（`APP_MAKER` / `APP_HOMEPAGE` 配置位已预留，主页与社媒链接待补充）。

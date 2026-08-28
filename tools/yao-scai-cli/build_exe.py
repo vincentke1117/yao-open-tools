@@ -66,11 +66,49 @@ def main() -> int:
     if IS_WINDOWS:
         note("安装 windows-curses（打包进 exe，保证 TUI 可用）")
         pip_install(venv_python, "windows-curses")
+        note("安装 pywebview（打包进 scai-gui.exe 的 Web 界面运行时）")
+        pip_install(venv_python, "pywebview")
 
     targets = [
-        ("scai", SCRIPT_DIR / "scai.py", []),
-        # scai-gui 双击直接进图形界面，不附带控制台窗口
-        ("scai-gui", SCRIPT_DIR / "scai_gui_main.py", ["--noconsole"]),
+        # CLI/TUI：排除 GUI 专用模块，保持轻量（GUI 统一走 scai-gui.exe）
+        (
+            "scai",
+            SCRIPT_DIR / "scai.py",
+            [
+                "--exclude-module",
+                "scai_gui_web",
+                "--exclude-module",
+                "scai_gui",
+                "--exclude-module",
+                "webview",
+                "--exclude-module",
+                "clr",
+                "--exclude-module",
+                "clr_loader",
+                "--exclude-module",
+                "pythonnet",
+            ],
+        ),
+        # scai-gui：无控制台 Web 界面；打包 web/ 资产与 WebView2 相关模块
+        (
+            "scai-gui",
+            SCRIPT_DIR / "scai_gui_main.py",
+            [
+                "--noconsole",
+                "--add-data",
+                f"{SCRIPT_DIR / 'web'}{os.pathsep}web",
+                "--hidden-import",
+                "webview.platforms.edgechromium",
+                "--hidden-import",
+                "webview.platforms.winforms",
+                "--hidden-import",
+                "clr",
+                "--hidden-import",
+                "pythonnet",
+                "--collect-all",
+                "clr_loader",
+            ],
+        ),
     ]
     for name, entry, extra_flags in targets:
         note(f"开始打包 {name}")
