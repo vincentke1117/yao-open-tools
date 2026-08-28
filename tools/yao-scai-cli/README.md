@@ -71,6 +71,24 @@ python .\scai.py $env:USERPROFILE
 python .\scai.py plan 20g $env:USERPROFILE
 ```
 
+### Build a standalone exe (optional)
+
+To package Scai into a single `scai.exe` that needs no Python on the target machine:
+
+```powershell
+python .\build_exe.py
+```
+
+The build script creates an isolated `.venv-build`, installs PyInstaller (plus `windows-curses`, so the TUI works out of the box) and produces `dist\scai.exe` (about 8 MB). Copy it anywhere on `PATH`, for example `%USERPROFILE%\bin`.
+
+If the default PyPI is slow, point the build at a mirror:
+
+```powershell
+$env:SCAI_PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"; python .\build_exe.py
+```
+
+Build outputs (`build/`, `dist/`, `*.spec`, `.venv-build/`) are gitignored; rebuild any time with the same command.
+
 ## Core Commands
 
 ```bash
