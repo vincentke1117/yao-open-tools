@@ -20,23 +20,22 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import scai
+from scai import APP_HOMEPAGE, APP_MAKER, APP_NAME, APP_NAME_ZH, APP_VERSION
 from scai_gui import (
     IS_MACOS,
     IS_WINDOWS,
+    LOG_DIR,
     LOG_FILE,
     STATE_FILE,
     append_cleanup_log,
     delete_permanently,
+    ensure_data_dir,
     load_last_root,
     move_to_trash,
     save_last_root,
 )
 
-APP_NAME = "Scai"
-APP_VERSION = "1.1.0"
-APP_MAKER = "Koding Studio"
-# 预留：主页 / 社交媒体链接。填入 URL 后空态页脚与关于信息自动带链接；留空则显示纯文本。
-APP_HOMEPAGE = ""
+# 品牌常量统一来自 scai.py（APP_NAME / APP_VERSION / APP_MAKER / APP_HOMEPAGE）
 WEB_DIR = Path(__file__).resolve().parent / "web"
 DEFAULT_WEB_LIMIT = 500
 
@@ -88,15 +87,24 @@ class ScanJob:
         self.error = ""
         self.analysis = None
         self.cancel_event = threading.Event()
+        self._progress_lock = threading.Lock()
+        self._progress = {"dirs": None, "files": None}
+
+    def update_progress(self, phase: str, stats) -> None:
+        with self._progress_lock:
+            self._progress[phase] = stats
 
     def snapshot(self) -> dict:
-        stats = getattr(self, "last_stats", None)
+        with self._progress_lock:
+            slots = dict(self._progress)
+        dirs = sum(getattr(s, "scanned_dirs", 0) for s in slots.values() if s)
+        files = sum(getattr(s, "scanned_files", 0) for s in slots.values() if s)
         return {
             "running": self.phase == "running",
             "phase": self.phase,
             "elapsed": (self.finished_at or time.time()) - self.started_at,
-            "dirs": getattr(stats, "scanned_dirs", 0) if stats else 0,
-            "files": getattr(stats, "scanned_files", 0) if stats else 0,
+            "dirs": dirs,
+            "files": files,
             "error": self.error,
         }
 
@@ -109,6 +117,7 @@ class Api:
         self._lock = threading.Lock()
         self._job: ScanJob | None = None
         self._thread: threading.Thread | None = None
+        ensure_data_dir()
 
     # ---------- 桥层小工具 ----------
 
@@ -151,6 +160,7 @@ class Api:
         return {
             "ok": True,
             "app_name": APP_NAME,
+            "app_name_zh": APP_NAME_ZH,
             "version": APP_VERSION,
             "maker": APP_MAKER,
             "homepage": APP_HOMEPAGE,
@@ -159,6 +169,40 @@ class Api:
             "last_scan_at": state.get("last_scan_at", ""),
             "theme": state.get("theme", "light"),
         }
+
+    def get_log(self, limit: int = 200) -> dict:
+        """读取最近的清理日志（新→旧），供应用内日志查看器展示。"""
+        try:
+            lines = LOG_FILE.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            lines = []
+        entries = []
+        for line in reversed(lines):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            action = entry.get("action", "move_to_trash")
+            mode_label = "永久删除" if action == "delete_permanent" else "回收站"
+            ok = bool(entry.get("ok"))
+            entries.append(
+                {
+                    "time": entry.get("time", ""),
+                    "mode": mode_label,
+                    "mode_kind": "permanent" if action == "delete_permanent" else "recycle",
+                    "path": entry.get("path", ""),
+                    "size": entry.get("size", 0),
+                    "human": scai.human_size(int(entry.get("size", 0) or 0)),
+                    "ok": ok,
+                    "error": entry.get("error") or "",
+                }
+            )
+            if len(entries) >= max(1, min(int(limit or 200), 1000)):
+                break
+        return {"ok": True, "entries": entries}
 
     def save_prefs(self, prefs: dict) -> dict:
         patch = {}
@@ -203,7 +247,7 @@ class Api:
                 limit=job.limit,
                 include_all=job.include_all,
                 max_depth=1,
-                progress_cb=lambda stats: setattr(job, "last_stats", stats),
+                progress_cb=lambda stats, phase: job.update_progress(phase, stats),
                 cancel_check=job.cancel_event.is_set,
             )
             job.analysis = analysis
@@ -471,7 +515,7 @@ def launch(root_path: Path | None = None, include_all: bool = False, limit: int 
         url += "?" + "&".join(params)
 
     window = webview.create_window(
-        f"{APP_NAME} 磁盘空间清理顾问",
+        f"{APP_NAME} {APP_NAME_ZH} · 磁盘空间清理顾问",
         url,
         js_api=api,
         width=1120,

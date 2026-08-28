@@ -25,6 +25,17 @@ except ImportError:  # Windows 默认 Python 无 _curses；可 pip install windo
 
 IS_WINDOWS = os.name == "nt"
 
+# 品牌信息（曾用名 Scai，2026-08 更名 Diskoala；scai/bf/scan 保留为兼容别名）
+APP_NAME = "Diskoala"
+APP_NAME_ZH = "磁盘考拉"
+APP_VERSION = "1.2.0"
+APP_MAKER = "Koding Studio"
+APP_HOMEPAGE = ""
+
+
+def program_display_name() -> str:
+    return os.environ.get("DISKOALA_PROG") or os.environ.get("SCAI_PROG", "diskoala")
+
 
 def default_computer_scan_root() -> Path:
     """全盘安全扫描根目录：Windows 为系统盘（通常 C:\\），其它平台为 /。"""
@@ -1190,7 +1201,7 @@ def classify_path(path: Path, size: int, kind: str) -> Insight:
         kind=kind,
         risk="review",
         category="未分类大项",
-        reason="Scai 还不能可靠判断用途。",
+        reason="Diskoala 还不能可靠判断用途。",
         action="先查看来源、修改时间和所属项目，再决定是否处理。",
     )
 
@@ -1219,32 +1230,66 @@ def create_space_analysis(
     max_depth: int | None = 1,
     progress_cb=None,
     cancel_check=None,
+    parallel: bool = True,
 ) -> SpaceAnalysis:
+    """扫描并聚合。progress_cb(stats, phase) 中 phase 为 "dirs" / "files"。
+
+    parallel=True 时目录聚合与文件 Top-N 两条遍历并行执行（约省一半墙钟时间）。
+    """
     start = time.time()
     dir_limit = max(8, limit)
     file_limit = max(DEFAULT_ANALYSIS_LIMIT, limit)
-    dirs, dir_stats = scan_top_dirs(
-        root=root,
-        limit=dir_limit,
-        include_all=include_all,
-        max_depth=max_depth,
-        progress_cb=progress_cb,
-        cancel_check=cancel_check,
-    )
-    files, file_stats = scan_top_files(
-        root=root,
-        limit=file_limit,
-        include_all=include_all,
-        progress_cb=progress_cb,
-        cancel_check=cancel_check,
-    )
+
+    dir_progress = file_progress = progress_cb
+    if progress_cb is not None:
+        dir_progress = lambda stats: progress_cb(stats, "dirs")  # noqa: E731
+        file_progress = lambda stats: progress_cb(stats, "files")  # noqa: E731
+
+    def run_dirs():
+        return scan_top_dirs(
+            root=root, limit=dir_limit, include_all=include_all,
+            max_depth=max_depth, progress_cb=dir_progress, cancel_check=cancel_check,
+        )
+
+    def run_files():
+        return scan_top_files(
+            root=root, limit=file_limit, include_all=include_all,
+            progress_cb=file_progress, cancel_check=cancel_check,
+        )
+
+    if parallel:
+        results: dict[str, tuple] = {}
+        errors: list[BaseException] = []
+
+        def wrap(name, fn):
+            try:
+                results[name] = fn()
+            except BaseException as exc:  # 线程内异常回传主线程统一抛出
+                errors.append(exc)
+
+        threads = [
+            threading.Thread(target=wrap, args=("dirs", run_dirs), daemon=True),
+            threading.Thread(target=wrap, args=("files", run_files), daemon=True),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        if errors:
+            raise errors[0]
+        dirs, dir_stats = results["dirs"]
+        files, file_stats = results["files"]
+    else:
+        dirs, dir_stats = run_dirs()
+        files, file_stats = run_files()
+
     insights = build_insights([*dirs, *files])
     return SpaceAnalysis(
         root=root,
         files=files,
         dirs=dirs,
-        file_stats=file_stats,
         dir_stats=dir_stats,
+        file_stats=file_stats,
         elapsed=time.time() - start,
         insights=insights,
     )
@@ -1293,11 +1338,11 @@ def print_aggregate_lines(items: list[tuple[str, int]], empty_text: str, limit: 
 def run_brief(args: argparse.Namespace) -> int:
     root = COMPUTER_SCAN_ROOT if args.computer else Path(args.root).expanduser().resolve()
     analysis = run_with_progress(
-        f"Scai 正在扫描 {root}",
+        f"Diskoala 正在扫描 {root}",
         lambda: create_space_analysis(root=root, limit=args.limit, include_all=args.all, max_depth=1),
     )
 
-    print("Scai Space Brief")
+    print(f"Diskoala {APP_VERSION} 空间简报")
     print()
     print(f"扫描范围: {analysis.root}")
     print(f"扫描用时: {analysis.elapsed:.2f}s")
@@ -1332,16 +1377,16 @@ def run_brief(args: argparse.Namespace) -> int:
         print()
 
     print("显示更多:")
-    print(f"  - scai more        显示 Top {DEFAULT_MORE_LIMIT} 文件")
-    print("  - scai more 200    显示 Top 200 文件")
+    print(f"  - diskoala more        显示 Top {DEFAULT_MORE_LIMIT} 文件")
+    print("  - diskoala more 200    显示 Top 200 文件")
     print()
 
     print("下一步:")
-    print("  - scai top          查看最大文件")
-    print("  - scai dirs         查看最大文件夹")
-    print("  - scai tui          进入交互浏览")
-    print("  - scai plan 20g     生成释放空间方案")
-    print("  - scai ai           生成 AI 诊断")
+    print("  - diskoala top          查看最大文件")
+    print("  - diskoala dirs         查看最大文件夹")
+    print("  - diskoala tui          进入交互浏览")
+    print("  - diskoala plan 20g     生成释放空间方案")
+    print("  - diskoala ai           生成 AI 诊断")
     return 0
 
 
@@ -1405,12 +1450,12 @@ def scan_path_summary(root: Path, include_all: bool) -> PathSummary:
 def run_explain(args: argparse.Namespace) -> int:
     path = Path(args.path).expanduser().resolve()
     if path.is_dir():
-        summary = run_with_progress(f"Scai 正在扫描 {path}", lambda: scan_path_summary(path, include_all=args.all))
+        summary = run_with_progress(f"Diskoala 正在扫描 {path}", lambda: scan_path_summary(path, include_all=args.all))
         insight = classify_path(path, summary.size, "dir")
     else:
         summary = scan_path_summary(path, include_all=args.all)
         insight = explain_path(path, include_all=args.all)
-    print("Scai Explain")
+    print("Diskoala Explain")
     print()
     print(f"路径: {insight.path}")
     print(f"类型: {'文件夹' if insight.kind == 'dir' else '文件'}")
@@ -1489,12 +1534,12 @@ def run_plan(args: argparse.Namespace) -> int:
         return 2
 
     analysis = run_with_progress(
-        f"Scai 正在扫描 {root}",
+        f"Diskoala 正在扫描 {root}",
         lambda: create_space_analysis(root=root, limit=args.limit, include_all=args.all, max_depth=None),
     )
     selected, total = select_plan_items(analysis.insights, target, root=root)
 
-    print(f"Scai Reclaim Plan: {human_size(target)}")
+    print(f"Diskoala 回收方案: {human_size(target)}")
     print()
     print(f"扫描范围: {root}")
     print("模式: 只生成计划，不删除任何文件。")
@@ -1515,7 +1560,7 @@ def run_plan(args: argparse.Namespace) -> int:
     if total < target:
         print("提示: 当前候选项不足以达到目标，可以扩大扫描范围或使用 --all。")
     trash_name = "回收站" if IS_WINDOWS else "废纸篓"
-    print(f"安全策略: 后续执行清理时应默认移动到{trash_name}，并记录操作日志。Scai 本身不会删除任何文件。")
+    print(f"安全策略: 默认移动到{trash_name}并记录操作日志；界面内可选永久删除。本命令只生成方案，不删除任何文件。")
     return 0
 
 
@@ -1554,7 +1599,7 @@ def analysis_payload(analysis: SpaceAnalysis) -> dict[str, object]:
 def build_ai_prompt(analysis: SpaceAnalysis) -> str:
     payload = analysis_payload(analysis)
     return (
-        "你是 Scai 的磁盘空间顾问。只根据下面 JSON 扫描摘要分析，不读取文件内容，"
+        f"你是 {APP_NAME}({APP_NAME_ZH}) 的磁盘空间顾问。只根据下面 JSON 扫描摘要分析，不读取文件内容，"
         "不要建议直接永久删除。请用中文输出：空间概览、主要占用、可安全关注、需要确认、不要碰、下一步建议。"
         "可以使用 Markdown 标题、加粗、列表和代码块，不要使用 Markdown 表格。\n\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)
@@ -1610,7 +1655,7 @@ def invoke_codex_diagnosis(prompt: str, timeout: int) -> tuple[str, str]:
 def run_ai(args: argparse.Namespace) -> int:
     root = COMPUTER_SCAN_ROOT if args.computer else Path(args.root).expanduser().resolve()
     analysis = run_with_progress(
-        f"Scai 正在扫描 {root}",
+        f"Diskoala 正在扫描 {root}",
         lambda: create_space_analysis(root=root, limit=args.limit, include_all=args.all, max_depth=1),
     )
     status, message = invoke_codex_diagnosis(build_ai_prompt(analysis), args.timeout)
@@ -1905,7 +1950,7 @@ class ScaiTui:
         mode_name = "文件" if self.mode == "files" else "文件夹"
         all_name = "全量" if self.include_all else "默认排除"
         depth = "-" if self.max_depth is None else str(self.max_depth)
-        title = f" scai | {mode_name} | Top {self.limit} | {all_name} | depth {depth} "
+        title = f" diskoala | {mode_name} | Top {self.limit} | {all_name} | depth {depth} "
         self.safe_addstr(stdscr, 0, 0, title.ljust(width - 1), self.color(1) or curses.A_REVERSE)
         root_text = f"路径: {self.root}"
         self.safe_addstr(stdscr, 1, 0, truncate_middle(root_text, width - 1), self.color(2))
@@ -2050,7 +2095,7 @@ def add_common_args(parser: argparse.ArgumentParser, help_text: str, default_lim
     parser.add_argument(
         "--all",
         action="store_true",
-        help="不跳过默认排除目录。注意：scai all 表示全盘安全扫描，不等于 --all。",
+        help="不跳过默认排除目录。注意：diskoala all 表示全盘安全扫描，不等于 --all。",
     )
     parser.add_argument(
         "--computer",
@@ -2070,31 +2115,37 @@ def add_dirs_args(parser: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog=os.environ.get("SCAI_PROG", "scai"),
-        description="Scai (Scan + AI) - CLI 为主、TUI 为辅的磁盘空间扫描与清理顾问。",
+        prog=program_display_name(),
+        description="Diskoala (磁盘考拉) - CLI 为主、TUI 为辅的磁盘空间扫描与清理顾问。",
         epilog=(
             "核心用法:\n"
-            "  scai                 输出 Space Brief 智能概览\n"
-            f"  scai all             从电脑根目录 {COMPUTER_SCAN_ROOT} 开始安全扫描\n"
-            "  scai top             查看最大文件\n"
-            "  scai more            显示更多 Top 文件\n"
-            "  scai dirs            查看最大文件夹\n"
-            "  scai tui             打开 TUI 浏览\n"
-            "  scai explain PATH    解释某个文件或目录\n"
-            "  scai plan 20g        生成释放空间方案\n"
-            "  scai ai              调用 Codex CLI 生成 AI 诊断\n"
-            "  scai gui             打开图形界面（扫描/建议/移到回收站）\n"
+            "  diskoala             输出空间简报\n"
+            f"  diskoala all         从电脑根目录 {COMPUTER_SCAN_ROOT} 开始安全扫描\n"
+            "  diskoala top         查看最大文件\n"
+            "  diskoala more        显示更多 Top 文件\n"
+            "  diskoala dirs        查看最大文件夹\n"
+            "  diskoala tui         打开 TUI 浏览\n"
+            "  diskoala explain PATH 解释某个文件或目录\n"
+            "  diskoala plan 20g    生成释放空间方案\n"
+            "  diskoala ai          调用 Codex CLI 生成 AI 诊断\n"
+            "  diskoala gui         打开图形界面（扫描/建议/清理）\n"
+            "旧命令 scai / bf / scan 仍作为兼容别名可用。\n"
             + (
                 "\nWindows 示例:\n"
-                "  scai C:\\Users\\你的用户名\n"
-                "  scai top C:\\ --limit 50\n"
-                "  scai plan 20g C:\\Users\\你的用户名\n"
-                "  scai explain C:\\Users\\你的用户名\\Downloads\\大文件.zip\n"
+                "  diskoala C:\\Users\\你的用户名\n"
+                "  diskoala top C:\\ --limit 50\n"
+                "  diskoala plan 20g C:\\Users\\你的用户名\n"
+                "  diskoala explain C:\\Users\\你的用户名\\Downloads\\大文件.zip\n"
                 if IS_WINDOWS
                 else ""
             )
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"{APP_NAME} {APP_VERSION} (by {APP_MAKER})",
     )
     subparsers = parser.add_subparsers(dest="command")
 
@@ -2154,6 +2205,9 @@ def split_interface_args(raw_args: list[str]) -> tuple[list[str], bool, bool]:
 def normalize_args(raw_args: list[str], program_name: str, force_tui: bool, force_plain: bool) -> list[str]:
     if len(raw_args) == 1 and raw_args[0].lower() in {"-h", "--help", "help", "h"}:
         return ["--help"]
+
+    if len(raw_args) == 1 and raw_args[0].lower() in {"-v", "--version", "version"}:
+        return ["--version"]
 
     if force_tui:
         return normalize_command_args("tui", raw_args)
@@ -2246,7 +2300,7 @@ def run_top(args: argparse.Namespace) -> int:
     root = COMPUTER_SCAN_ROOT if args.computer else Path(args.root).expanduser().resolve()
     start = time.time()
     records, stats = run_with_progress(
-        f"Scai 正在扫描 {root}",
+        f"Diskoala 正在扫描 {root}",
         lambda: scan_top_files(root=root, limit=args.limit, include_all=args.all),
     )
     elapsed = time.time() - start
@@ -2262,7 +2316,7 @@ def run_dirs(args: argparse.Namespace) -> int:
     root = COMPUTER_SCAN_ROOT if args.computer else Path(args.root).expanduser().resolve()
     start = time.time()
     records, stats = run_with_progress(
-        f"Scai 正在扫描 {root}",
+        f"Diskoala 正在扫描 {root}",
         lambda: scan_top_dirs(
             root=root,
             limit=args.limit,
@@ -2279,7 +2333,7 @@ def run_tui(args: argparse.Namespace) -> int:
         print(
             "TUI 不可用：当前 Python 未提供 curses 模块。\n"
             "Windows 可执行: pip install windows-curses\n"
-            "或改用 CLI: scai / scai top / scai dirs / scai plan / scai explain",
+            "或改用 CLI: diskoala / diskoala top / diskoala dirs / diskoala plan / diskoala explain",
             file=sys.stderr,
         )
         return 2
@@ -2297,7 +2351,7 @@ def run_gui(args: argparse.Namespace) -> int:
         import scai_gui_web
     except ImportError:
         print(
-            "图形界面模块未随本程序打包。请使用 scai-gui.exe 打开图形界面，"
+            "图形界面模块未随本程序打包。请使用 diskoala-gui.exe 打开图形界面，"
             "或从源码运行: python scai.py gui",
             file=sys.stderr,
         )
@@ -2322,7 +2376,7 @@ def should_use_tui(program_name: str, force_tui: bool, force_plain: bool) -> boo
 
 def main() -> int:
     enable_windows_ansi()
-    program_name = os.environ.get("SCAI_PROG", "scai")
+    program_name = program_display_name()
     parser = build_parser()
     raw_args, force_tui, force_plain = split_interface_args(sys.argv[1:])
     normalized_args = normalize_args(raw_args, program_name=program_name, force_tui=force_tui, force_plain=force_plain)
@@ -2332,7 +2386,7 @@ def main() -> int:
     if args.command == "tui" or should_use_tui(program_name, force_tui, force_plain):
         if not sys.stdin.isatty() or not sys.stdout.isatty():
             if force_tui:
-                print("TUI 需要交互式终端；请在真实终端运行 scai，或加 --plain 使用表格输出。", file=sys.stderr)
+                print("TUI 需要交互式终端；请在真实终端运行 diskoala，或加 --plain 使用表格输出。", file=sys.stderr)
                 return 2
             if args.command == "tui" and args.mode == "dirs":
                 return run_dirs(args)

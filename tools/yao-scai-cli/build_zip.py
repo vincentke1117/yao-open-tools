@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""把 agent skill(skill/)与便携 exe(dist/*.exe)打包为 dist/scai-skill.zip。
+"""把 agent skill(skill/)与便携 exe(dist/*.exe)打包为 dist/diskoala-skill.zip。
 
 用法:
     python build_zip.py
 
 zip 结构:
-    scai-skill/SKILL.md            agent skill 本体
-    scai-skill/INSTALL.md          安装说明
-    scai-skill/install-skill.cmd   Windows 一键安装
-    scai-skill/install-skill.sh    macOS/Linux 一键安装
-    scai-skill/bin/scai.exe        便携 CLI/TUI
-    scai-skill/bin/scai-gui.exe    便携 GUI
+    diskoala-skill/SKILL.md            agent skill 本体
+    diskoala-skill/INSTALL.md          安装说明
+    diskoala-skill/install-skill.cmd   Windows 一键安装
+    diskoala-skill/install-skill.sh    macOS/Linux 一键安装
+    diskoala-skill/bin/diskoala.exe    便携 CLI/TUI
+    diskoala-skill/bin/diskoala-gui.exe 便携 GUI
 
 需先运行 python build_exe.py 生成 exe。
 """
@@ -23,9 +23,9 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR / "skill"
 DIST_DIR = SCRIPT_DIR / "dist"
-ZIP_PATH = DIST_DIR / "scai-skill.zip"
+ZIP_PATH = DIST_DIR / "diskoala-skill.zip"
 SKILL_FILES = ("SKILL.md", "INSTALL.md", "install-skill.cmd", "install-skill.sh")
-EXE_NAMES = ("scai.exe", "scai-gui.exe")
+EXE_NAMES = ("diskoala.exe", "diskoala-gui.exe")
 
 
 def note(message: str) -> None:
@@ -53,9 +53,9 @@ def main() -> int:
     DIST_DIR.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(ZIP_PATH, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in skill_files:
-            archive.write(path, f"scai-skill/{path.name}")
+            archive.write(path, f"diskoala-skill/{path.name}")
         for path in exes:
-            archive.write(path, f"scai-skill/bin/{path.name}")
+            archive.write(path, f"diskoala-skill/bin/{path.name}")
     note(f"完成: {ZIP_PATH} ({ZIP_PATH.stat().st_size / 1024 / 1024:.1f} MB)")
     return 0
 

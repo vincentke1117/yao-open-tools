@@ -1,20 +1,20 @@
-# Scai
+# Diskoala 磁盘考拉
 
-**Scai = Scan + AI**. Scai is an AI-native disk space advisor: CLI for decisions, TUI for exploration.
+**Diskoala** (Disk + Koala, formerly *Scai*) is a friendly disk space advisor by **Koding Studio**: CLI for decisions, TUI for exploration, GUI for human-driven cleanup.
 
 Tool folder: `tools/yao-scai-cli`  
-Project: `Scai`  
-Command: `scai`
+Project: `Diskoala`  
+Command: `diskoala` (legacy aliases: `scai` / `bf` / `scan`)
 
-Scai is not meant to be only another `du` wrapper. The goal is to scan disk usage, classify what matters, explain cleanup risk, and generate safe reclaim plans.
+Diskoala is not meant to be only another `du` wrapper. The goal is to scan disk usage, classify what matters, explain cleanup risk, and generate safe reclaim plans.
 
 ## Features
 
 - CLI-first Space Brief as the default experience.
 - Dynamic scan progress in interactive terminals.
-- Top 50 file details in the default brief, with `scai more` for longer lists.
+- Top 50 file details in the default brief, with `diskoala more` for longer lists.
 - TUI browser for interactive exploration.
-- GUI companion (`scai gui` / `scai-gui.exe`): scan, risk-colored suggestions, checkbox selection, and one-click cleanup that moves items to the Recycle Bin with a full audit log.
+- GUI companion (`diskoala gui` / `diskoala-gui.exe`): scan, risk-colored suggestions, checkbox selection, and one-click cleanup that moves items to the Recycle Bin with a full audit log.
 - Rule analysis engine for caches, build artifacts, archives, media, backups, data files, and risky system paths.
 - Cleanup plan generation with no deletion side effects.
 - Optional AI diagnosis through the official `codex exec` CLI when available.
@@ -34,7 +34,8 @@ Scai is not meant to be only another `du` wrapper. The goal is to scan disk usag
 
 The installer creates or updates these commands in `$HOME/bin`:
 
-- `scai`: main command.
+- `diskoala`: main command.
+- `scai` / `bf` / `scan`: legacy aliases.
 - `bf`: legacy alias.
 - `scan`: compatibility alias, defaults to table-style top files.
 
@@ -56,7 +57,7 @@ Or double-click / run:
 install.cmd
 ```
 
-This creates `%USERPROFILE%\bin\scai.cmd` (plus `bf.cmd` / `scan.cmd`) and adds `%USERPROFILE%\bin` to your user `PATH` if needed. Open a **new** terminal after install.
+This creates `%USERPROFILE%\bin\diskoala.cmd` (plus `scai.cmd` / `bf.cmd` / `scan.cmd` legacy aliases) and adds `%USERPROFILE%\bin` to your user `PATH` if needed. Open a **new** terminal after install.
 
 Optional TUI support:
 
@@ -74,13 +75,13 @@ python .\scai.py plan 20g $env:USERPROFILE
 
 ### Build a standalone exe (optional)
 
-To package Scai into a single `scai.exe` that needs no Python on the target machine:
+To package Diskoala into portable executables that need no Python on the target machine:
 
 ```powershell
 python .\build_exe.py
 ```
 
-The build script creates an isolated `.venv-build`, installs PyInstaller, `windows-curses` and `pywebview`, and produces two fully portable single-file executables: `dist\scai.exe` (console CLI/TUI, about 8 MB) and `dist\scai-gui.exe` (Web GUI rendered with the system WebView2 runtime, about 18 MB, double-click to launch; falls back to the legacy tkinter UI if WebView2 is missing). No installation or Python is needed on the target machine — copy them to any folder (or a USB stick) and run. Optionally put them on `PATH`, e.g. `%USERPROFILE%\bin`.
+The build script creates an isolated `.venv-build`, installs PyInstaller, `windows-curses` and `pywebview`, and produces two fully portable single-file executables: `dist\diskoala.exe` (console CLI/TUI, about 8 MB) and `dist\diskoala-gui.exe` (Web GUI rendered with the system WebView2 runtime, about 18 MB, double-click to launch; falls back to the legacy tkinter UI if WebView2 is missing). No installation or Python is needed on the target machine — copy them to any folder (or a USB stick) and run. Optionally put them on `PATH`, e.g. `%USERPROFILE%\bin`.
 
 If the default PyPI is slow, point the build at a mirror:
 
@@ -93,41 +94,41 @@ Build outputs (`build/`, `dist/`, `*.spec`, `.venv-build/`) are gitignored; rebu
 ## Core Commands
 
 ```bash
-scai              # Space Brief for the current directory
-scai all          # safe full-computer scan (C:\ on Windows, / elsewhere)
-scai top          # largest files
-scai more         # show more largest files, default Top 100
-scai more 200     # show Top 200 largest files
-scai dirs         # largest folders
-scai tui          # open TUI browser
-scai explain PATH # explain one file or folder
-scai plan 20g     # generate a reclaim plan
-scai ai           # ask Codex CLI to analyze the scan summary
-scai gui          # open the GUI (scan, advice, safe cleanup)
+diskoala              # Space Brief for the current directory
+diskoala all          # safe full-computer scan (C:\ on Windows, / elsewhere)
+diskoala top          # largest files
+diskoala more         # show more largest files, default Top 100
+diskoala more 200     # show Top 200 largest files
+diskoala dirs         # largest folders
+diskoala tui          # open TUI browser
+diskoala explain PATH # explain one file or folder
+diskoala plan 20g     # generate a reclaim plan
+diskoala ai           # ask Codex CLI to analyze the scan summary
+diskoala gui          # open the GUI (scan, advice, safe cleanup)
 ```
 
 ### Windows cleanup examples
 
 ```powershell
-scai C:\Users\你的用户名
-scai top C:\Users\你的用户名 --limit 50
-scai dirs C:\Users\你的用户名 --max-depth 2
-scai plan 20g C:\Users\你的用户名
-scai explain C:\Users\你的用户名\Downloads\big-setup.exe
-scai all
+diskoala C:\Users\你的用户名
+diskoala top C:\Users\你的用户名 --limit 50
+diskoala dirs C:\Users\你的用户名 --max-depth 2
+diskoala plan 20g C:\Users\你的用户名
+diskoala explain C:\Users\你的用户名\Downloads\big-setup.exe
+diskoala all
 ```
 
-`scai all` on Windows scans the system drive (`C:\` by default) while skipping system-managed trees such as `Windows`, `Program Files`, and `ProgramData`. Scai **never deletes files**; it only explains risk and builds a reclaim plan.
+`diskoala all` on Windows scans the system drive (`C:\` by default) while skipping system-managed trees such as `Windows`, `Program Files`, and `ProgramData`. The CLI is read-only — it explains risk and builds reclaim plans; deletion happens only in the GUI (Recycle Bin by default, permanent delete as an explicit opt-in).
 
 Short forms still work:
 
 ```bash
-scai 50
-scai d
-scai all
-scai more
-scai ~/Downloads
-scai --plain ~/Downloads 30
+diskoala 50
+diskoala d
+diskoala all
+diskoala more
+diskoala ~/Downloads
+diskoala --plain ~/Downloads 30
 ```
 
 ## Default Brief
@@ -170,9 +171,9 @@ Top 50 文件明细:
 Use the TUI when you want to browse and compare results interactively:
 
 ```bash
-scai tui
-scai tui ~/Downloads
-scai tui ~/Projects --mode dirs
+diskoala tui
+diskoala tui ~/Downloads
+diskoala tui ~/Projects --mode dirs
 ```
 
 TUI keys:
@@ -196,7 +197,7 @@ The bottom panel follows the current selection and shows available metadata such
 
 ## GUI
 
-`scai gui` (or double-click `scai-gui.exe`) opens a modern windowed interface for human-driven cleanup, rebuilt 1:1 from the high-fidelity mockups in `docs/ui参考/` (pywebview + local HTML; falls back to the legacy tkinter UI when WebView2 is unavailable):
+`diskoala gui` (or double-click `diskoala-gui.exe`) opens a modern windowed interface for human-driven cleanup, rebuilt 1:1 from the high-fidelity mockups in `docs/ui参考/` (pywebview + local HTML; falls back to the legacy tkinter UI when WebView2 is unavailable):
 
 - **Empty state**: welcome screen with the last scanned directory prefilled and the last scan date.
 - **Scanning state**: live directory/file counters, elapsed time, and a cancel button.
@@ -207,8 +208,8 @@ The bottom panel follows the current selection and shows available metadata such
 - Light/dark themes; the window is fully offline.
 
 ```bash
-scai gui
-scai gui ~/Downloads
+diskoala gui
+diskoala gui ~/Downloads
 ```
 
 ## Agent Skill
@@ -220,7 +221,7 @@ python .\build_exe.py   # produces dist\scai.exe / dist\scai-gui.exe
 python .\build_zip.py   # produces dist\scai-skill.zip (~22 MB)
 ```
 
-The zip contains `scai-skill/` with `SKILL.md` (teaches agents the scai workflow: scan → explain → plan → hand deletion to the user, never delete permanently), `INSTALL.md`, one-click installers (`install-skill.cmd` / `install-skill.sh`), and `bin/` holding both portable exes. The installer places the skill into `~/.agents/skills/scai/` and the exes onto `PATH`; SKILL.md source lives in `skill/` in this repo.
+The zip contains `diskoala-skill/` with `SKILL.md` (teaches agents the scai workflow: scan → explain → plan → hand deletion to the user, never delete permanently), `INSTALL.md`, one-click installers (`install-skill.cmd` / `install-skill.sh`), and `bin/` holding both portable exes. The installer places the skill into `~/.agents/skills/diskoala/` and the exes onto `PATH`; SKILL.md source lives in `skill/` in this repo.
 
 ## Rule Analysis
 
@@ -237,10 +238,10 @@ The first version is intentionally conservative. It explains why an item was cla
 `scai plan` produces a plan only; it never deletes files:
 
 ```bash
-scai plan 10g
-scai plan 500m ~/Downloads
-scai plan 20g all
-scai plan 20g ~/Projects --all
+diskoala plan 10g
+diskoala plan 500m ~/Downloads
+diskoala plan 20g all
+diskoala plan 20g ~/Projects --all
 ```
 
 Plans prefer `safe` candidates first, then `review` candidates. Future cleanup execution should default to moving items to Trash and logging every action.
@@ -254,8 +255,8 @@ The AI prompt contains paths, sizes, formats, rule categories, risk labels, and 
 AI responses are rendered for terminals: Markdown headings, bold text, lists, links, and code blocks are cleaned up so raw markers like `**text**` or `* item` do not dominate the output.
 
 ```bash
-scai ai
-scai ai ~/Downloads --timeout 240
+diskoala ai
+diskoala ai ~/Downloads --timeout 240
 ```
 
 If Codex is unavailable or times out, Scai falls back to the local rule-based Space Brief.
@@ -275,4 +276,4 @@ scan --tui ~/Downloads
 
 ---
 
-Scai is built by **Koding Studio**. Homepage and social links: coming soon (branding hooks are prepared in `scai_gui_web.py` via `APP_MAKER` / `APP_HOMEPAGE`).
+Diskoala is built by **Koding Studio**. Homepage and social links: coming soon (fill `APP_HOMEPAGE` in `scai.py`; the About dialog and empty-state footer link automatically). Version: `diskoala --version` / in-app 关于 dialog.

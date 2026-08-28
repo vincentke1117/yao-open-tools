@@ -18,6 +18,7 @@
     lastScanAt: "",
     maker: "Koding Studio",
     homepage: "",
+    version: "",
     scanning: false,
     detailKey: null,
     inited: false,
@@ -221,6 +222,9 @@
       selectRow(node.key);
       const tr = document.querySelector('tr[data-key="' + cssEsc(node.key) + '"]');
       if (tr) tr.scrollIntoView({ block: "nearest" });
+    }, (node) => {
+      // 双击下钻：把扫描根切到该目录重新扫描
+      startScan(node.key, $("include-all").checked);
     });
   }
 
@@ -509,7 +513,86 @@
     const credit = S.homepage
       ? '<a href="' + S.homepage + '" style="color:inherit">Koding Studio</a>'
       : "Koding Studio";
-    $("empty-footer").innerHTML = (date ? "上次扫描: " + date + " · " : "") + "由 " + credit + " 制作";
+    $("empty-footer").innerHTML = (date ? "上次扫描: " + date + " · " : "") + "Diskoala 由 " + credit + " 制作";
+  }
+
+  // ---------------- 关于 / 日志 ----------------
+
+  function openAbout() {
+    $("about-version").textContent = "v" + (S.version || "") + (S.maker ? "" : "");
+    const makerEl = $("about-maker");
+    makerEl.innerHTML = "";
+    makerEl.textContent = S.maker || "Koding Studio";
+    const hp = $("about-homepage");
+    hp.innerHTML = "";
+    if (S.homepage) {
+      const a = document.createElement("a");
+      a.href = S.homepage;
+      a.textContent = S.homepage;
+      hp.appendChild(a);
+    } else {
+      hp.textContent = "主页与社交媒体即将上线";
+    }
+    $("about-overlay").classList.remove("hidden");
+  }
+
+  async function openLogViewer() {
+    const a = api();
+    if (!a) return;
+    $("log-overlay").classList.remove("hidden");
+    await refreshLogViewer();
+  }
+
+  async function refreshLogViewer() {
+    const a = api();
+    if (!a) return;
+    const res = await a.get_log(200);
+    const list = $("log-list");
+    list.innerHTML = "";
+    if (!res || !res.ok || !res.entries.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 5;
+      td.style.textAlign = "center";
+      td.style.color = "var(--muted)";
+      td.textContent = "暂无清理记录";
+      tr.appendChild(td);
+      list.appendChild(tr);
+      return;
+    }
+    for (const e of res.entries) {
+      const tr = document.createElement("tr");
+      const cells = [
+        e.time || "-",
+        "",
+        e.human || "-",
+        e.path || "",
+        "",
+      ];
+      for (let i = 0; i < cells.length; i++) {
+        const td = document.createElement("td");
+        if (i === 1) {
+          const span = document.createElement("span");
+          span.className = "log-mode " + (e.mode_kind === "permanent" ? "permanent" : "recycle");
+          span.textContent = e.mode;
+          td.appendChild(span);
+        } else if (i === 3) {
+          td.textContent = cells[i];
+          td.title = cells[i];
+        } else if (i === 4) {
+          if (e.ok) td.textContent = "成功";
+          else {
+            td.className = "log-result-fail";
+            td.textContent = "失败";
+            td.title = e.error || "";
+          }
+        } else {
+          td.textContent = cells[i];
+        }
+        tr.appendChild(td);
+      }
+      list.appendChild(tr);
+    }
   }
 
   function setFilter(filter) {
@@ -558,6 +641,8 @@
       if (e.key !== "Escape") return;
       if (!$("modal-overlay").classList.contains("hidden")) closeConfirm();
       else if (!$("prompt-overlay").classList.contains("hidden")) $("prompt-overlay").classList.add("hidden");
+      else if (!$("log-overlay").classList.contains("hidden")) $("log-overlay").classList.add("hidden");
+      else if (!$("about-overlay").classList.contains("hidden")) $("about-overlay").classList.add("hidden");
     });
 
     document.querySelectorAll(".tab").forEach((t) =>
@@ -589,7 +674,15 @@
     $("prompt-cancel").addEventListener("click", () => $("prompt-overlay").classList.add("hidden"));
     $("prompt-close").addEventListener("click", () => $("prompt-overlay").classList.add("hidden"));
 
-    $("btn-open-log").addEventListener("click", async () => { const a = api(); if (a) await a.open_log(); });
+    $("btn-open-log").addEventListener("click", openLogViewer);
+    $("log-close").addEventListener("click", () => $("log-overlay").classList.add("hidden"));
+    $("log-cancel").addEventListener("click", () => $("log-overlay").classList.add("hidden"));
+    $("log-refresh").addEventListener("click", refreshLogViewer);
+    $("log-open-file").addEventListener("click", async () => { const a = api(); if (a) await a.open_log(); });
+    $("btn-about").addEventListener("click", openAbout);
+    $("brand-about").addEventListener("click", openAbout);
+    $("about-close").addEventListener("click", () => $("about-overlay").classList.add("hidden"));
+    $("about-cancel").addEventListener("click", () => $("about-overlay").classList.add("hidden"));
     $("btn-reveal-detail").addEventListener("click", () => reveal(S.detailKey));
     $("btn-auto-plan").addEventListener("click", autoPlan);
 
@@ -613,7 +706,9 @@
       if (st && st.ok) {
         window.__scaiComputerRoot = st.computer_root;
         S.lastScanAt = st.last_scan_at || "";
+        S.maker = st.maker || S.maker;
         S.homepage = st.homepage || "";
+        S.version = st.version || "";
         applyTheme(st.theme || "light");
         $("empty-path").value = st.last_root || "";
         $("scan-path").value = st.last_root || "";
@@ -696,6 +791,16 @@
       await openPrompt();
       step("ai-prompt", !$("prompt-overlay").classList.contains("hidden") && $("prompt-text").value.length > 100);
       $("prompt-overlay").classList.add("hidden");
+
+      // 关于弹窗
+      openAbout();
+      step("about-modal", !$("about-overlay").classList.contains("hidden") && ($("about-version").textContent || "").length > 1);
+      $("about-overlay").classList.add("hidden");
+
+      // 日志查看器
+      await openLogViewer();
+      step("log-modal", !$("log-overlay").classList.contains("hidden") && $("log-list").querySelectorAll("tr").length > 0);
+      $("log-overlay").classList.add("hidden");
     } catch (e) {
       report.ok = false;
       report.errors.push("exception: " + (e && e.message));

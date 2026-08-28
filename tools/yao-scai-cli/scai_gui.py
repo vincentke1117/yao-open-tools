@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scai GUI: 图形界面版磁盘空间清理顾问。
+"""Diskoala GUI(tkinter 回退版): 图形界面磁盘空间清理顾问。
 
 流程: 选择目录 -> 扫描 -> 按风险分级给出建议 -> 用户勾选 -> 移动到回收站并记录日志。
 
@@ -47,9 +47,24 @@ FILTER_LABELS = (
     ("risky", "高风险"),
 )
 DEFAULT_GUI_LIMIT = 200
-LOG_DIR = Path.home() / ".scai"
+DATA_DIR = Path.home() / ".diskoala"
+LEGACY_DATA_DIR = Path.home() / ".scai"
+LOG_DIR = DATA_DIR
 LOG_FILE = LOG_DIR / "cleanup-log.jsonl"
 STATE_FILE = LOG_DIR / "gui-state.json"
+
+
+def ensure_data_dir() -> None:
+    """创建数据目录，并把旧 ~/.scai 下的日志与状态迁移过来（只迁移一次）。"""
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        for name in ("cleanup-log.jsonl", "gui-state.json"):
+            src = LEGACY_DATA_DIR / name
+            dst = DATA_DIR / name
+            if src.exists() and not dst.exists():
+                shutil.copy2(src, dst)
+    except OSError:
+        pass
 
 
 # ---------------------------------------------------------------- 回收站/废纸篓
@@ -246,7 +261,7 @@ class ScaiGuiApp:
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
 
         self.root = tk.Tk()
-        self.root.title("Scai — 磁盘空间清理顾问")
+        self.root.title("Diskoala 磁盘考拉 — 磁盘空间清理顾问")
         self.root.minsize(860, 520)
         self.root.geometry("1080x680")
 
@@ -363,7 +378,7 @@ class ScaiGuiApp:
         target = Path(self.path_var.get()).expanduser()
         resolved = target.resolve()
         if not resolved.exists():
-            messagebox.showwarning("Scai", f"路径不存在: {resolved}")
+            messagebox.showwarning("Diskoala", f"路径不存在: {resolved}")
             return
         self.scan_root = resolved
         self.include_all = self.include_all_var.get()
@@ -407,7 +422,7 @@ class ScaiGuiApp:
             return
         if kind == "error":
             self.finish_scan(None, 0.0)
-            messagebox.showerror("Scai", f"扫描失败: {payload}")
+            messagebox.showerror("Diskoala", f"扫描失败: {payload}")
             return
         analysis, elapsed = payload  # type: ignore[misc]
         self.finish_scan(analysis, elapsed)
@@ -539,12 +554,12 @@ class ScaiGuiApp:
 
     def auto_check_by_target(self) -> None:
         if not self.rows:
-            messagebox.showinfo("Scai", "请先完成一次扫描。")
+            messagebox.showinfo("Diskoala", "请先完成一次扫描。")
             return
         try:
             target = scai.parse_size(self.target_var.get().strip())
         except ValueError as exc:
-            messagebox.showwarning("Scai", f"目标大小无效: {exc}\n示例: 20g、500m")
+            messagebox.showwarning("Diskoala", f"目标大小无效: {exc}\n示例: 20g、500m")
             return
         insights = [
             scai.Insight(
@@ -570,13 +585,13 @@ class ScaiGuiApp:
     def reveal_location(self) -> None:
         selection = self.tree.selection()
         if not selection:
-            messagebox.showinfo("Scai", "请先在列表中选择一个项目。")
+            messagebox.showinfo("Diskoala", "请先在列表中选择一个项目。")
             return
         row = self.row_at(selection[0])
         if row is None:
             return
         if not row.path.exists():
-            messagebox.showinfo("Scai", f"路径已不存在:\n{row.path}")
+            messagebox.showinfo("Diskoala", f"路径已不存在:\n{row.path}")
             return
         try:
             if IS_WINDOWS:
@@ -593,16 +608,16 @@ class ScaiGuiApp:
     def show_ai_prompt(self) -> None:
         """生成包含扫描摘要的诊断提示词, 供用户复制给任意 AI; 本程序不调用任何 AI 服务。"""
         if self.analysis is None:
-            messagebox.showinfo("Scai AI 提示词", "请先完成一次扫描, 再生成 AI 提示词。")
+            messagebox.showinfo("Diskoala AI 提示词", "请先完成一次扫描, 再生成 AI 提示词。")
             return
         prompt = scai.build_ai_prompt(self.analysis)
         window = tk.Toplevel(self.root)
-        window.title("Scai AI 诊断提示词")
+        window.title("Diskoala AI 诊断提示词")
         window.geometry("880x620")
         window.transient(self.root)
         intro = (
             "以下提示词已包含本次扫描摘要(JSON)。点击「复制全部」后粘贴到任意 AI 对话"
-            "(ChatGPT / Claude / Gemini / Codex 等)即可获得磁盘清理诊断。Scai 不会调用任何 AI 服务。"
+            "(ChatGPT / Claude / Gemini / Codex 等)即可获得磁盘清理诊断。Diskoala 不会调用任何 AI 服务。"
         )
         ttk.Label(window, text=intro, wraplength=840, padding=(8, 8, 8, 4)).pack(fill=tk.X)
         frame = ttk.Frame(window)
@@ -660,7 +675,7 @@ class ScaiGuiApp:
         if len(selected) > 8:
             preview += f"\n  …… 等共 {len(selected)} 项"
         confirmed = messagebox.askyesno(
-            "Scai 确认删除",
+            "Diskoala 确认删除",
             f"将把以下 {len(selected)} 个项目移动到回收站, 共约 {scai.human_size(total)}:\n\n{preview}\n\n"
             "回收站中的内容可以恢复。确定继续吗?",
             icon="warning",
@@ -699,12 +714,12 @@ class ScaiGuiApp:
         self.status_var.set(f"已移动 {len(success)} 项到回收站 (约 {scai.human_size(freed)}); 建议重新扫描获得最新空间分布。")
         if failed:
             messagebox.showwarning(
-                "Scai 清理结果",
+                "Diskoala 清理结果",
                 f"成功 {len(success)} 项, 失败 {failed} 项。\n失败原因已写入日志, 可点击「打开日志」查看。",
             )
         else:
             messagebox.showinfo(
-                "Scai 清理结果",
+                "Diskoala 清理结果",
                 f"已成功移动 {len(success)} 项到回收站, 共约 {scai.human_size(freed)}。",
             )
 
@@ -723,6 +738,7 @@ def launch(
     limit: int = DEFAULT_GUI_LIMIT,
     auto_scan: bool = True,
 ) -> int:
+    ensure_data_dir()
     try:
         app = ScaiGuiApp(root_path=root_path, include_all=include_all, limit=limit, auto_scan=auto_scan)
     except tk.TclError as exc:

@@ -11,9 +11,9 @@
 
     <!-- 顶部品牌 + 扫描栏（结果态/扫描态显示） -->
     <header id="scanbar" class="scanbar hidden">
-      <div class="brand">
-        <span class="brand-logo">S</span>
-        <span class="brand-name">Scai 磁盘空间清理顾问</span>
+      <div class="brand" id="brand-about" title="关于 Diskoala">
+        <img src="logo.png" class="brand-img" alt="Diskoala">
+        <span class="brand-name">Diskoala 磁盘考拉</span>
       </div>
       <div class="scanbar-controls">
         <input id="scan-path" class="input path-input" type="text" spellcheck="false" placeholder="选择要扫描的目录">
@@ -22,6 +22,7 @@
           <span data-icon="shield"></span>全盘安全扫描
         </button>
         <button id="btn-scan" class="btn primary" type="button"><span data-icon="search"></span>开始扫描</button>
+        <button id="btn-about" class="btn icon-btn" type="button" title="关于"><span data-icon="info"></span></button>
         <button id="btn-theme" class="btn icon-btn" type="button" title="切换明暗主题"><span data-icon="moon"></span></button>
       </div>
     </header>
@@ -29,10 +30,10 @@
     <!-- 空态（首次打开） -->
     <section id="view-empty" class="view-empty hidden">
       <div class="empty-hero">
-        <div class="empty-logo">S</div>
-        <h1>欢迎回到 Scai</h1>
-        <p class="empty-tagline">只进回收站，安全释放磁盘空间</p>
-        <p class="empty-sub">选择要扫描的目录，Scai 会按风险分级给出清理建议</p>
+        <img src="logo.png" class="empty-logo" alt="Diskoala">
+        <h1>欢迎回到 Diskoala 磁盘考拉</h1>
+        <p class="empty-tagline">安全释放磁盘空间的清理顾问</p>
+        <p class="empty-sub">选择要扫描的目录，Diskoala 会按风险分级给出清理建议；删除默认进回收站</p>
         <div class="empty-path-row">
           <input id="empty-path" class="input" type="text" spellcheck="false" placeholder="例如 C:\Users\你\Downloads">
           <button id="btn-empty-browse" class="btn secondary" type="button">浏览</button>
@@ -186,6 +187,44 @@
       <div class="modal-buttons">
         <button id="prompt-copy" class="btn primary" type="button"><span data-icon="copy"></span>复制全部</button>
         <button id="prompt-cancel" class="btn secondary" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 关于弹窗 -->
+  <div id="about-overlay" class="modal-overlay hidden">
+    <div class="modal about-modal" role="dialog" aria-modal="true">
+      <button id="about-close" class="btn icon-btn modal-x" type="button"><span data-icon="x"></span></button>
+      <img src="logo.png" class="about-logo" alt="Diskoala">
+      <h2 style="text-align:center">Diskoala 磁盘考拉</h2>
+      <p class="about-version" id="about-version" style="text-align:center"></p>
+      <dl class="about-lines">
+        <dt>制作者</dt><dd id="about-maker"></dd>
+        <dt>主页</dt><dd id="about-homepage"></dd>
+      </dl>
+      <p class="about-safety">安全承诺：删除默认移到回收站（可恢复）；永久删除需两步确认；系统高风险项始终锁定；每次操作记录审计日志。</p>
+      <div class="modal-buttons" style="justify-content:center">
+        <button id="about-cancel" class="btn secondary" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 清理日志查看器 -->
+  <div id="log-overlay" class="modal-overlay hidden">
+    <div class="modal log-modal" role="dialog" aria-modal="true">
+      <button id="log-close" class="btn icon-btn modal-x" type="button"><span data-icon="x"></span></button>
+      <h2>清理日志</h2>
+      <p class="modal-desc">最近 200 条清理记录（新→旧）。回收站条目可从系统回收站恢复。</p>
+      <div class="modal-list-wrap">
+        <table class="modal-table log-table">
+          <thead><tr><th>时间</th><th>方式</th><th class="col-size">大小</th><th>路径</th><th>结果</th></tr></thead>
+          <tbody id="log-list"></tbody>
+        </table>
+      </div>
+      <div class="modal-buttons">
+        <button id="log-refresh" class="btn secondary" type="button">刷新</button>
+        <button id="log-open-file" class="btn secondary" type="button">在系统中打开</button>
+        <button id="log-cancel" class="btn primary" type="button">关闭</button>
       </div>
     </div>
   </div>

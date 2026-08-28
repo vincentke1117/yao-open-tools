@@ -52,7 +52,7 @@
       : { x, y: y + offset, w, h: h - offset };
   }
 
-  function render(container, nodes, onPick) {
+  function render(container, nodes, onPick, onDrill) {
     container.innerHTML = "";
     if (!nodes.length) {
       container.innerHTML = '<p class="detail-empty" style="margin-top:12px">暂无目录数据</p>';
@@ -86,6 +86,7 @@
       r.setAttribute("class", "tm-rect" + (p.node.key ? "" : " other"));
       if (p.node.key) {
         r.addEventListener("click", () => onPick && onPick(p.node));
+        if (onDrill) r.addEventListener("dblclick", () => onDrill(p.node));
         const title = document.createElementNS(svgNS, "title");
         title.textContent = `${p.node.name}：${p.node.human}`;
         r.appendChild(title);

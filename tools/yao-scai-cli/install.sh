@@ -15,26 +15,18 @@ fi
 
 mkdir -p "$bin_dir"
 
-cat > "${bin_dir}/scai" <<EOF
+# 主命令 diskoala；scai/bf/scan 为兼容别名（曾用名 Scai）
+for prog in diskoala scai bf scan; do
+  cat > "${bin_dir}/${prog}" <<EOF
 #!/bin/zsh
-SCAI_PROG=scai exec ${python_cmd} "${script_dir}/scai.py" "\$@"
+DISKOALA_PROG=${prog} exec ${python_cmd} "${script_dir}/scai.py" "\$@"
 EOF
+done
 
-cat > "${bin_dir}/bf" <<EOF
-#!/bin/zsh
-SCAI_PROG=bf exec ${python_cmd} "${script_dir}/scai.py" "\$@"
-EOF
+chmod +x "${bin_dir}/diskoala" "${bin_dir}/scai" "${bin_dir}/bf" "${bin_dir}/scan"
 
-cat > "${bin_dir}/scan" <<EOF
-#!/bin/zsh
-SCAI_PROG=scan exec ${python_cmd} "${script_dir}/scai.py" "\$@"
-EOF
-
-chmod +x "${bin_dir}/scai" "${bin_dir}/bf" "${bin_dir}/scan"
-
-echo "已安装 scai: ${bin_dir}/scai"
-echo "旧别名 bf: ${bin_dir}/bf"
-echo "表格兼容入口 scan: ${bin_dir}/scan"
+echo "已安装 diskoala: ${bin_dir}/diskoala"
+echo "兼容别名: scai / bf / scan"
 echo "Python: ${python_cmd}"
-echo "运行 scai --help 查看用法。"
+echo "运行 diskoala --help 查看用法。"
 echo "Windows 请改用: powershell -ExecutionPolicy Bypass -File .\\install.ps1"

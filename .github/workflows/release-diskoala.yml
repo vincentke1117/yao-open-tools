@@ -1,0 +1,46 @@
+name: Release Diskoala
+
+on:
+  push:
+    tags: ["diskoala-v*"]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: tools/yao-scai-cli
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sanity check
+        run: |
+          python -m py_compile scai.py scai_gui.py scai_gui_web.py scai_gui_main.py build_exe.py build_zip.py
+          python scai.py --version
+
+      - name: Build exes and skill zip
+        run: |
+          python build_exe.py
+          python build_zip.py
+
+      - name: Smoke test the packaged GUI
+        env:
+          SCAI_GUI_SMOKE_MS: "60000"
+          SCAI_GUI_SMOKE_DIR: "D:\\a\\yao-open-tools\\yao-open-tools\\tools\\yao-scai-cli"
+        run: |
+          $output = ./dist/diskoala-gui.exe 2>&1 | Out-String
+          Write-Host $output
+          if ($output -notmatch '"ok": true') { throw "GUI smoke failed" }
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            tools/yao-scai-cli/dist/diskoala.exe
+            tools/yao-scai-cli/dist/diskoala-gui.exe
+            tools/yao-scai-cli/dist/diskoala-skill.zip

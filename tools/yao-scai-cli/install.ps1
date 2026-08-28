@@ -36,13 +36,14 @@ function Write-CmdWrapper {
     $content = @"
 @echo off
 setlocal
-set SCAI_PROG=$Prog
+set DISKOALA_PROG=$Prog
 $PythonCmd "$ScaiPy" %*
 "@
     Set-Content -Path $target -Value $content -Encoding ASCII
     Write-Host "已安装: $target"
 }
 
+Write-CmdWrapper -Name "diskoala" -Prog "diskoala"
 Write-CmdWrapper -Name "scai" -Prog "scai"
 Write-CmdWrapper -Name "bf" -Prog "bf"
 Write-CmdWrapper -Name "scan" -Prog "scan"
@@ -73,10 +74,10 @@ if ($LASTEXITCODE -eq 0) {
 
 Write-Host ""
 Write-Host "安装完成。新开一个终端后运行:"
-Write-Host "  scai --help"
-Write-Host "  scai $env:USERPROFILE"
-Write-Host "  scai all"
-Write-Host "  scai plan 20g $env:USERPROFILE"
+Write-Host "  diskoala --help"
+Write-Host "  diskoala `$env:USERPROFILE"
+Write-Host "  diskoala all"
+Write-Host "  diskoala plan 20g `$env:USERPROFILE"
 Write-Host ""
-Write-Host "当前会话也可直接:"
+Write-Host "兼容别名 scai / bf / scan 仍可用。当前会话也可直接:"
 Write-Host "  $PythonCmd `"$ScaiPy`" --help"

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 script_dir="${0:A:h}"
-skill_dir="${HOME}/.agents/skills/scai"
+skill_dir="${HOME}/.agents/skills/diskoala"
 
 mkdir -p "$skill_dir"
 cp "${script_dir}/SKILL.md" "${skill_dir}/SKILL.md"
@@ -15,5 +15,5 @@ if [ -d "${script_dir}/bin" ] && [ -n "$(ls "${script_dir}/bin" 2>/dev/null)" ];
 fi
 
 echo ""
-echo "完成。新开一个终端和 agent 会话后生效，验证: scai --help"
+echo "完成。新开一个终端和 agent 会话后生效，验证: diskoala --help"
 echo "注意: 包内 exe 仅适用于 Windows; macOS/Linux 请用仓库 tools/yao-scai-cli/install.sh。"

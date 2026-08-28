@@ -1,11 +1,11 @@
-# Scai Repository Instructions
+# Diskoala Repository Instructions
 
-When working in this repository, treat `scai` as the main project and command.
+When working in this repository, treat `diskoala` (formerly `scai`) as the main project and command.
 
 After completing a user-requested iteration:
 
 - run the relevant local checks,
-- commit the intended Scai changes with a concise message,
+- commit the intended Diskoala changes with a concise message,
 - push `main` to `origin`,
 - report the commit and validation result.
 

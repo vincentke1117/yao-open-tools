@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""把 Scai 打包成独立可执行文件（Windows 下为 dist/scai.exe 与 dist/scai-gui.exe）。
+"""把 Diskoala 打包成独立可执行文件（Windows 下为 dist/diskoala.exe 与 dist/diskoala-gui.exe）。
 
 用法:
     python build_exe.py
@@ -10,8 +10,9 @@
 
 流程:
     1. 在 .venv-build 中准备独立构建环境（不污染用户 Python）。
-    2. 安装 PyInstaller；Windows 上额外安装 windows-curses，让 exe 的 TUI 开箱即用。
-    3. 单文件模式打包 scai（控制台 CLI/TUI）与 scai-gui（无控制台图形界面）。
+    2. 安装 PyInstaller；Windows 上额外安装 windows-curses 与 pywebview。
+    3. 单文件模式打包 diskoala（控制台 CLI/TUI）与 diskoala-gui（无控制台 Web 界面），
+       带品牌图标(assets/logo.ico)与版本资源(Koding Studio / Diskoala)。
 
 构建产物 build/、dist/、*.spec、.venv-build/ 均不进入版本库。
 """
@@ -20,12 +21,16 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 import venv
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 VENV_DIR = SCRIPT_DIR / ".venv-build"
+ASSETS_DIR = SCRIPT_DIR / "assets"
 IS_WINDOWS = os.name == "nt"
+
+APP_VERSION = "1.2.0"
 
 
 def note(message: str) -> None:
@@ -52,6 +57,44 @@ def ensure_build_env() -> Path:
     return venv_python
 
 
+def write_version_file(product_name: str) -> Path:
+    """生成 PyInstaller --version-file（Windows 资源管理器里可见的版本信息）。"""
+    parts = tuple(int(part) for part in APP_VERSION.split(".")[:3]) + (0,)
+    content = f"""# UTF-8
+#
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers={parts},
+    prodvers={parts},
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0),
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable('080404b0', [
+        StringStruct('CompanyName', 'Koding Studio'),
+        StringStruct('FileDescription', '{product_name} - disk space cleanup advisor'),
+        StringStruct('FileVersion', '{APP_VERSION}'),
+        StringStruct('ProductName', 'Diskoala'),
+        StringStruct('ProductVersion', '{APP_VERSION}'),
+        StringStruct('LegalCopyright', '(c) 2026 Koding Studio'),
+        StringStruct('OriginalFilename', '{product_name.lower()}.exe'),
+      ])
+    ]),
+    VarFileInfo([VarStruct('Translation', [2052, 1200])])
+  ]
+)
+"""
+    handle = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8")
+    handle.write(content)
+    handle.close()
+    return Path(handle.name)
+
+
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -66,66 +109,59 @@ def main() -> int:
     if IS_WINDOWS:
         note("安装 windows-curses（打包进 exe，保证 TUI 可用）")
         pip_install(venv_python, "windows-curses")
-        note("安装 pywebview（打包进 scai-gui.exe 的 Web 界面运行时）")
+        note("安装 pywebview（打包进 diskoala-gui.exe 的 Web 界面运行时）")
         pip_install(venv_python, "pywebview")
 
+    icon = ASSETS_DIR / "logo.ico"
+    version_files: list[Path] = []
     targets = [
-        # CLI/TUI：排除 GUI 专用模块，保持轻量（GUI 统一走 scai-gui.exe）
+        # CLI/TUI：排除 GUI 专用模块，保持轻量（GUI 统一走 diskoala-gui.exe）
         (
-            "scai",
+            "diskoala",
             SCRIPT_DIR / "scai.py",
             [
-                "--exclude-module",
-                "scai_gui_web",
-                "--exclude-module",
-                "scai_gui",
-                "--exclude-module",
-                "webview",
-                "--exclude-module",
-                "clr",
-                "--exclude-module",
-                "clr_loader",
-                "--exclude-module",
-                "pythonnet",
+                "--exclude-module", "scai_gui_web",
+                "--exclude-module", "scai_gui",
+                "--exclude-module", "webview",
+                "--exclude-module", "clr",
+                "--exclude-module", "clr_loader",
+                "--exclude-module", "pythonnet",
             ],
         ),
-        # scai-gui：无控制台 Web 界面；打包 web/ 资产与 WebView2 相关模块
+        # diskoala-gui：无控制台 Web 界面；打包 web/ 资产与 WebView2 相关模块
         (
-            "scai-gui",
+            "diskoala-gui",
             SCRIPT_DIR / "scai_gui_main.py",
             [
                 "--noconsole",
-                "--add-data",
-                f"{SCRIPT_DIR / 'web'}{os.pathsep}web",
-                "--hidden-import",
-                "webview.platforms.edgechromium",
-                "--hidden-import",
-                "webview.platforms.winforms",
-                "--hidden-import",
-                "clr",
-                "--hidden-import",
-                "pythonnet",
-                "--collect-all",
-                "clr_loader",
+                "--add-data", f"{SCRIPT_DIR / 'web'}{os.pathsep}web",
+                "--hidden-import", "webview.platforms.edgechromium",
+                "--hidden-import", "webview.platforms.winforms",
+                "--hidden-import", "clr",
+                "--hidden-import", "pythonnet",
+                "--collect-all", "clr_loader",
             ],
         ),
     ]
     for name, entry, extra_flags in targets:
         note(f"开始打包 {name}")
-        run(
-            [
-                str(venv_python),
-                "-m",
-                "PyInstaller",
-                "--noconfirm",
-                "--clean",
-                "--onefile",
-                "--name",
-                name,
-                *extra_flags,
-                str(entry),
-            ]
-        )
+        command = [
+            str(venv_python), "-m", "PyInstaller",
+            "--noconfirm", "--clean", "--onefile", "--name", name,
+        ]
+        if icon.exists():
+            command += ["--icon", str(icon)]
+        if IS_WINDOWS:
+            version_file = write_version_file(name)
+            version_files.append(version_file)
+            command += ["--version-file", str(version_file)]
+        run(command + extra_flags + [str(entry)])
+
+    for path in version_files:
+        try:
+            path.unlink()
+        except OSError:
+            pass
 
     note("完成:")
     for name, _, _ in targets:
