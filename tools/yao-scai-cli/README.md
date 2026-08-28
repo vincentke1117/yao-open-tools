@@ -2,6 +2,8 @@
 
 **Diskoala** (Disk + Koala, formerly *Scai*) is a friendly disk space advisor by **Koding Studio**: CLI for decisions, TUI for exploration, GUI for human-driven cleanup.
 
+> **Native upgrade in progress**: `../diskoala-native` contains the Rust + Tauri rewrite (CLI 614 KB, GUI 9 MB, byte-compatible CLI output, same web frontend). This Python version remains the maintenance line.
+
 Tool folder: `tools/yao-scai-cli`  
 Project: `Diskoala`  
 Command: `diskoala` (legacy aliases: `scai` / `bf` / `scan`)
