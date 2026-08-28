@@ -58,17 +58,17 @@
     <!-- 结果态 -->
     <section id="view-results" class="view-results hidden">
       <div class="cards">
-        <div class="card stat-card">
+        <div class="card stat-card clickable" data-filter="all" title="点击查看全部条目">
           <p class="stat-label">扫描根目录</p>
           <p class="stat-value"><span id="card-total">0</span><span class="stat-unit" id="card-total-unit"></span></p>
           <span class="stat-icon neutral" data-icon="drive"></span>
         </div>
-        <div class="card stat-card">
+        <div class="card stat-card clickable" data-filter="safe" title="点击筛选「可清理」条目">
           <p class="stat-label">可清理空间</p>
           <p class="stat-value safe-text"><span id="card-safe">0</span><span class="stat-unit" id="card-safe-unit"></span></p>
           <span class="stat-icon safe" data-icon="leaf"></span>
         </div>
-        <div class="card stat-card">
+        <div class="card stat-card clickable" data-filter="review" title="点击筛选「需确认」条目">
           <p class="stat-label">需确认空间</p>
           <p class="stat-value review-text"><span id="card-review">0</span><span class="stat-unit" id="card-review-unit"></span></p>
           <span class="stat-icon review" data-icon="alert"></span>
@@ -136,6 +136,7 @@
 
       <footer class="actionbar">
         <p class="selection-summary" id="selection-summary">未选择项目</p>
+        <button id="btn-clear-sel" class="btn text-btn hidden" type="button">清除选择</button>
         <div class="actionbar-buttons">
           <div class="target-group" title="按目标空间自动勾选方案（可清理优先），勾选后请人工复核">
             <input id="target-input" class="input target-input" type="text" placeholder="20g">
@@ -163,8 +164,13 @@
         </table>
         <p class="modal-more hidden" id="modal-more"></p>
       </div>
+      <div id="perm-warning" class="modal-warning perm hidden">
+        <span data-icon="alert"></span>
+        <span><b>永久删除不可恢复！</b>文件不会进入回收站，删除后无法找回。再次点击红色按钮才会执行。</span>
+      </div>
       <div class="modal-buttons">
         <button id="modal-cancel" class="btn secondary" type="button">取消</button>
+        <button id="modal-perm" class="btn danger" type="button" title="永久删除，不进回收站"><span data-icon="trash"></span>直接删除</button>
         <button id="modal-confirm" class="btn primary-green" type="button"><span data-icon="trash"></span>移到回收站</button>
       </div>
     </div>

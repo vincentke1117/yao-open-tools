@@ -104,3 +104,5 @@ scai_gui_main.py       # 改：入口走 scai_gui_web；WebView2 缺失时回退
 4. treemap：**自绘 SVG squarified treemap**（点击联动列表）✅。
 
 实施结果：`scai_gui_web.py` + `web/`（index.html / style.css / app.js / treemap.js / icons.js）；引擎侧新增进度回调、可取消扫描、根目录总量（`scai.py`，CLI 行为不变）；WebView2 缺失时自动回退旧 tkinter 界面。品牌：Koding Studio（`APP_MAKER` / `APP_HOMEPAGE` 配置位已预留，主页与社媒链接待补充）。
+
+**2026-08-28 产品决策更新**：应用户要求，删除增加两种模式——「移到回收站」（默认，可恢复）与「直接删除」（永久，不可恢复）。护栏：高风险项仍锁定；永久删除采用两步确认（按钮进入待确认态 + 红色警示 + 5 秒自动复位）；审计日志以 `delete_permanent` / `move_to_trash` 区分记录。原"永不永久删除"约束由产品所有者主动解除，仅保留上述安全设计。

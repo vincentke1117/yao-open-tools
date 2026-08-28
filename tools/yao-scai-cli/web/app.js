@@ -131,7 +131,17 @@
   function renderTable() {
     const tbody = $("table-body");
     tbody.innerHTML = "";
-    for (const row of visibleRows()) {
+    const rows = visibleRows();
+    if (!rows.length) {
+      const tr = document.createElement("tr");
+      tr.className = "table-empty";
+      const td = document.createElement("td");
+      td.colSpan = 6;
+      td.textContent = S.filter === "all" ? "本次扫描没有发现可展示的项目" : "该分类下暂无项目";
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+    for (const row of rows) {
       const tr = document.createElement("tr");
       tr.dataset.key = row.key;
       tr.className = "clickable";
@@ -240,11 +250,17 @@
     S._dedupedSelection = keys;
     const items = keys.map((k) => S.rows.find((r) => r.key === k)).filter(Boolean);
     const total = items.reduce((a, r) => a + r.size, 0);
+    $("btn-clear-sel").classList.toggle("hidden", items.length === 0);
     if (!items.length) {
       $("selection-summary").textContent = "未选择项目";
       $("btn-trash").disabled = true;
     } else {
-      $("selection-summary").innerHTML = "已选 <b></b> 项，共 <b></b>";
+      const safeN = items.filter((r) => r.risk === "safe").length;
+      const revN = items.length - safeN;
+      const parts = ["已选 <b></b> 项"];
+      if (revN > 0) parts.push('<span class="risk-breakdown">可清理 ' + safeN + " · 需确认 " + revN + "</span>");
+      parts.push("共 <b></b>");
+      $("selection-summary").innerHTML = parts.join("，");
       const bs = $("selection-summary").querySelectorAll("b");
       bs[0].textContent = fmtCount(items.length);
       bs[1].textContent = human(total);
@@ -394,15 +410,40 @@
   function closeConfirm() {
     $("modal-overlay").classList.add("hidden");
     S._pendingTrash = null;
+    resetPermArm();
   }
 
-  async function doTrash() {
+  // 永久删除两步确认：第一次点击进入待确认态，5 秒内再次点击才执行
+  let permArmed = false;
+  let permTimer = null;
+  function resetPermArm() {
+    permArmed = false;
+    if (permTimer) { clearTimeout(permTimer); permTimer = null; }
+    const b = $("modal-perm");
+    b.classList.remove("armed");
+    b.innerHTML = window.scaiIcon("trash") + "直接删除";
+    $("perm-warning").classList.add("hidden");
+  }
+  function armPerm() {
+    permArmed = true;
+    const b = $("modal-perm");
+    b.classList.add("armed");
+    b.innerHTML = window.scaiIcon("alert") + "确认永久删除";
+    $("perm-warning").classList.remove("hidden");
+    if (permTimer) clearTimeout(permTimer);
+    permTimer = setTimeout(resetPermArm, 5000);
+  }
+
+  async function doTrash(mode) {
     const a = api();
     if (!a || !S._pendingTrash) return;
     const keys = S._pendingTrash;
+    const permanent = mode === "permanent";
     $("modal-confirm").disabled = true;
-    const res = await a.do_trash(keys);
+    $("modal-perm").disabled = true;
+    const res = await a.do_trash(keys, permanent ? "permanent" : "recycle");
     $("modal-confirm").disabled = false;
+    $("modal-perm").disabled = false;
     closeConfirm();
     if (!res || !res.ok) { toast("清理执行失败: " + ((res && res.error) || ""), "error"); return; }
     const removed = new Set(res.moved || []);
@@ -410,10 +451,11 @@
     for (const k of removed) S.checked.delete(k);
     S.totalBytes = Math.max(0, (S.totalBytes || 0) - (res.freed || 0));
     renderAll();
+    const actionText = permanent ? "已永久删除 " : "已移到回收站 ";
     if (res.failures && res.failures.length) {
-      toast("已移到回收站 " + res.moved.length + " 项（" + res.freed_human + "），" + res.failures.length + " 项失败，详见日志", "warning");
+      toast(actionText + res.moved.length + " 项（" + res.freed_human + "），" + res.failures.length + " 项失败，详见日志", "warning");
     } else {
-      toast("已移到回收站 " + res.moved.length + " 项，释放约 " + res.freed_human + "。建议重新扫描查看最新空间分布。", "success");
+      toast(actionText + res.moved.length + " 项，释放约 " + res.freed_human + "。" + (permanent ? "" : "可从回收站恢复。") + "建议重新扫描查看最新空间分布。", permanent ? "warning" : "success");
     }
   }
 
@@ -470,6 +512,12 @@
     $("empty-footer").innerHTML = (date ? "上次扫描: " + date + " · " : "") + "由 " + credit + " 制作";
   }
 
+  function setFilter(filter) {
+    S.filter = filter || "all";
+    renderTabs();
+    renderTable();
+  }
+
   async function autoPlan() {
     const a = api();
     if (!a) return;
@@ -500,9 +548,23 @@
     $("btn-browse").addEventListener("click", () => browseTo("scan-path"));
     $("btn-empty-browse").addEventListener("click", () => browseTo("empty-path"));
     $("btn-cancel-scan").addEventListener("click", async () => { const a = api(); if (a) await a.cancel_scan(); });
+    $("btn-clear-sel").addEventListener("click", () => { S.checked.clear(); renderTable(); updateSelection(); });
+
+    // 键盘：路径回车触发扫描/勾选；Esc 关闭弹窗
+    $("scan-path").addEventListener("keydown", (e) => { if (e.key === "Enter") startScan($("scan-path").value, $("include-all").checked); });
+    $("empty-path").addEventListener("keydown", (e) => { if (e.key === "Enter") startScan($("empty-path").value, false); });
+    $("target-input").addEventListener("keydown", (e) => { if (e.key === "Enter") autoPlan(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (!$("modal-overlay").classList.contains("hidden")) closeConfirm();
+      else if (!$("prompt-overlay").classList.contains("hidden")) $("prompt-overlay").classList.add("hidden");
+    });
 
     document.querySelectorAll(".tab").forEach((t) =>
-      t.addEventListener("click", () => { S.filter = t.dataset.filter; renderTabs(); renderTable(); })
+      t.addEventListener("click", () => setFilter(t.dataset.filter))
+    );
+    document.querySelectorAll(".stat-card.clickable").forEach((card) =>
+      card.addEventListener("click", () => setFilter(card.dataset.filter))
     );
     document.querySelectorAll(".sortable").forEach((th) =>
       th.addEventListener("click", () => {
@@ -518,7 +580,8 @@
     $("btn-trash").addEventListener("click", openConfirm);
     $("modal-cancel").addEventListener("click", closeConfirm);
     $("modal-close").addEventListener("click", closeConfirm);
-    $("modal-confirm").addEventListener("click", doTrash);
+    $("modal-confirm").addEventListener("click", () => doTrash("recycle"));
+    $("modal-perm").addEventListener("click", () => { if (!permArmed) armPerm(); else doTrash("permanent"); });
     $("modal-overlay").addEventListener("click", (e) => { if (e.target === $("modal-overlay")) closeConfirm(); });
 
     $("btn-ai-prompt").addEventListener("click", openPrompt);
@@ -600,8 +663,29 @@
       await openConfirm();
       step("confirm-modal", !$("modal-overlay").classList.contains("hidden"));
       step("modal-items", $("modal-list").querySelectorAll("tr").length > 0);
+      step("perm-button", !!$("modal-perm") && $("modal-perm").textContent.indexOf("直接删除") >= 0);
+
+      // 永久删除两步确认：第一次点击进入待确认态，关闭后复位
+      $("modal-perm").click();
+      step("perm-armed", $("modal-perm").classList.contains("armed") && !$("perm-warning").classList.contains("hidden"));
       closeConfirm();
+      step("perm-reset", !$("modal-perm").classList.contains("armed") && $("perm-warning").classList.contains("hidden"));
       step("modal-close", $("modal-overlay").classList.contains("hidden"));
+
+      // 空状态：切到无数据的分类
+      const before = S.filter;
+      setFilter("review");
+      step("empty-state", document.querySelector("#table-body .table-empty") !== null || S.rows.some((r) => r.risk === "review"));
+      setFilter(before);
+
+      // 统计卡点击筛选
+      const activeTab = document.querySelector(".tab.active");
+      const card = document.querySelector('.stat-card.clickable[data-filter="safe"]');
+      if (card) {
+        card.click();
+        step("card-filter", document.querySelector(".tab.active").dataset.filter === "safe");
+        setFilter("all");
+      }
 
       // 主题切换
       applyTheme(S.theme === "dark" ? "light" : "dark");

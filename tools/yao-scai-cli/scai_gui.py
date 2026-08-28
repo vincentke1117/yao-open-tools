@@ -14,6 +14,7 @@ import ctypes
 import json
 import os
 import queue
+import shutil
 import subprocess
 import sys
 import threading
@@ -143,6 +144,20 @@ def move_to_trash(path: Path) -> tuple[bool, str]:
     if IS_MACOS:
         return move_to_trash_macos(path)
     return move_to_trash_linux(path)
+
+
+def delete_permanently(path: Path) -> tuple[bool, str]:
+    """永久删除（不可恢复）。仅由用户在 GUI 中显式选择；回收站仍是默认删除路径。"""
+    if not path.exists():
+        return False, "路径已不存在"
+    try:
+        if path.is_dir() and not path.is_symlink():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+    except OSError as exc:
+        return False, str(exc)
+    return True, ""
 
 
 def append_cleanup_log(records: list[dict[str, object]]) -> None:

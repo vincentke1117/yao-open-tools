@@ -26,6 +26,7 @@ from scai_gui import (
     LOG_FILE,
     STATE_FILE,
     append_cleanup_log,
+    delete_permanently,
     load_last_root,
     move_to_trash,
     save_last_root,
@@ -292,8 +293,11 @@ class Api:
             "dropped_risky": risky_dropped,
         }
 
-    def do_trash(self, keys) -> dict:
+    def do_trash(self, keys, mode: str = "recycle") -> dict:
+        """执行清理。mode: recycle（默认，进回收站可恢复）| permanent（永久删除，不可恢复）。"""
         keys = [str(k) for k in (keys or [])]
+        if mode not in ("recycle", "permanent"):
+            mode = "recycle"
         if not keys:
             return {"ok": False, "error": "未选择项目"}
         with self._lock:
@@ -306,11 +310,15 @@ class Api:
         logs: list[dict] = []
         for item in items:
             path = Path(item["key"])
-            ok, error = move_to_trash(path)
+            if mode == "permanent":
+                ok, error = delete_permanently(path)
+            else:
+                ok, error = move_to_trash(path)
             logs.append(
                 {
                     "path": item["key"], "size": item["size"], "kind": item["kind"],
                     "risk": item["risk"], "category": item["category"],
+                    "mode": mode, "action": "delete_permanent" if mode == "permanent" else "move_to_trash",
                     "ok": ok, "error": error or None,
                 }
             )
@@ -322,6 +330,7 @@ class Api:
         append_cleanup_log(logs)
         return {
             "ok": True,
+            "mode": mode,
             "moved": moved,
             "freed": freed,
             "freed_human": scai.human_size(freed),

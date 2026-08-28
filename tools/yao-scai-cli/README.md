@@ -201,8 +201,9 @@ The bottom panel follows the current selection and shows available metadata such
 - **Empty state**: welcome screen with the last scanned directory prefilled and the last scan date.
 - **Scanning state**: live directory/file counters, elapsed time, and a cancel button.
 - **Result state**: three overview cards (root total / safely reclaimable / needs review), risk filter tabs with live counts, a file table with pill-style risk badges (high-risk rows show a lock and cannot be checked), a clickable treemap of directory sizes, and a detail panel explaining every judgement.
-- **Decision bar**: deduplicated selection summary, target-based auto-check (e.g. `20g`), AI prompt window (copy a diagnosis prompt with the JSON summary to any AI chat — the GUI never calls an AI service), open-location, open-log, and the single green primary action: move to Recycle Bin.
-- **Safety model unchanged**: deletion always goes to the Recycle Bin / Trash (never permanent, the word itself never appears), risky items are locked server-side and client-side, every action is appended to `~/.scai/cleanup-log.jsonl`.
+- **Decision bar**: deduplicated selection summary (with safe/review breakdown), target-based auto-check (e.g. `20g`), AI prompt window (copy a diagnosis prompt with the JSON summary to any AI chat — the GUI never calls an AI service), open-location, open-log, clear-selection, and the primary cleanup action. Stat cards are clickable to filter. Keyboard: Enter starts a scan from the path box, Esc closes dialogs.
+- **Two delete modes** (owner decision, 2026-08-28): the confirmation dialog offers **移到回收站** (default, restorable) and **直接删除** (permanent, irreversible). Permanent delete uses a two-step armed confirmation with a red warning and auto-disarms after 5 seconds.
+- **Safety model**: risky items are locked server-side and client-side; the server re-filters risky and overlapping paths on every delete call; every action — `move_to_trash` or `delete_permanent` — is appended to `~/.scai/cleanup-log.jsonl`.
 - Light/dark themes; the window is fully offline.
 
 ```bash
