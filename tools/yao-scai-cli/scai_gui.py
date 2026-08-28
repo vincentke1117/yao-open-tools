@@ -14,6 +14,7 @@ import ctypes
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -24,7 +25,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, font as tkfont, messagebox, ttk
 
 import scai
 
@@ -48,6 +49,7 @@ FILTER_LABELS = (
 DEFAULT_GUI_LIMIT = 200
 LOG_DIR = Path.home() / ".scai"
 LOG_FILE = LOG_DIR / "cleanup-log.jsonl"
+STATE_FILE = LOG_DIR / "gui-state.json"
 
 
 # ---------------------------------------------------------------- 回收站/废纸篓
@@ -171,6 +173,50 @@ def open_log_location() -> None:
         pass
 
 
+def load_last_root() -> Path | None:
+    try:
+        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        root = Path(str(data.get("last_root", "")))
+        if root.is_dir():
+            return root
+    except (OSError, ValueError, TypeError):
+        pass
+    return None
+
+
+def save_last_root(root: Path) -> None:
+    try:
+        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        STATE_FILE.write_text(json.dumps({"last_root": str(root)}, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def render_markdown_plain(markdown: str) -> str:
+    # GUI 无 ANSI 环境, 复用 scai 的行内转换(styles=False)得到纯文本
+    rendered: list[str] = []
+    in_code_block = False
+    for raw_line in markdown.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        stripped = raw_line.strip()
+        if stripped.startswith(("```", "~~~")):
+            in_code_block = not in_code_block
+            rendered.append("")
+            continue
+        if in_code_block:
+            rendered.append(f"    {raw_line.rstrip()}")
+            continue
+        if not stripped:
+            if rendered and rendered[-1]:
+                rendered.append("")
+            continue
+        heading = re.match(r"^(#{1,6})\s+(.+)$", stripped)
+        if heading:
+            rendered.append(scai.render_inline_markdown(heading.group(2).strip(), False))
+            continue
+        rendered.append(scai.render_inline_markdown(raw_line.rstrip(), False))
+    return "\n".join(rendered).strip()
+
+
 # ---------------------------------------------------------------- GUI
 
 
@@ -192,13 +238,22 @@ class GuiRow:
 
 
 class ScaiGuiApp:
-    def __init__(self, root_path: Path, include_all: bool = False, limit: int = DEFAULT_GUI_LIMIT) -> None:
+    def __init__(
+        self,
+        root_path: Path,
+        include_all: bool = False,
+        limit: int = DEFAULT_GUI_LIMIT,
+        auto_scan: bool = True,
+    ) -> None:
         self.scan_root = root_path
         self.include_all = include_all
         self.limit = limit
+        self.auto_scan = auto_scan
         self.rows: list[GuiRow] = []
         self.filter = "all"
+        self.analysis = None
         self.scan_thread: threading.Thread | None = None
+        self.ai_thread: threading.Thread | None = None
         self.scan_started_at = 0.0
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
 
@@ -211,8 +266,13 @@ class ScaiGuiApp:
         self.filter_var = tk.StringVar(value="all")
         self.status_var = tk.StringVar(value="选择目录后点击「扫描」")
         self.selection_var = tk.StringVar(value="未选择项目")
+        self.target_var = tk.StringVar(value="20g")
 
         self._build_widgets()
+        if self.auto_scan:
+            self.root.after(50, self.start_scan)
+        else:
+            self.status_var.set(f"目录已就绪（{root_path}），点击「扫描」开始分析")
 
     # ---------------------------------------------------------------- 界面搭建
 
@@ -243,6 +303,11 @@ class ScaiGuiApp:
             text="显示默认排除目录",
             variable=self.include_all_var,
         ).pack(side=tk.LEFT, padx=(16, 0))
+        ttk.Label(toolbar, text="目标释放:").pack(side=tk.LEFT, padx=(16, 0))
+        self.target_entry = ttk.Entry(toolbar, textvariable=self.target_var, width=8)
+        self.target_entry.pack(side=tk.LEFT, padx=(4, 0))
+        self.auto_check_button = ttk.Button(toolbar, text="按目标勾选", command=self.auto_check_by_target)
+        self.auto_check_button.pack(side=tk.LEFT, padx=(4, 0))
 
         self.progress = ttk.Progressbar(self.root, mode="indeterminate")
         self.progress.pack(fill=tk.X, padx=8)
@@ -271,6 +336,7 @@ class ScaiGuiApp:
         self.tree.bind("<Button-1>", self.on_tree_click)
         self.tree.bind("<space>", self.on_tree_space)
         self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
+        self.tree.bind("<Double-1>", lambda _event: self.reveal_location())
 
         detail_label = ttk.Label(self.root, text="选中项详情与建议:", padding=(8, 6, 8, 0))
         detail_label.pack(fill=tk.X)
@@ -284,6 +350,10 @@ class ScaiGuiApp:
         ttk.Button(bottom, text="打开日志", command=open_log_location).pack(side=tk.RIGHT)
         self.delete_button = ttk.Button(bottom, text="删除所选（移到回收站）", command=self.delete_selected, state=tk.DISABLED)
         self.delete_button.pack(side=tk.RIGHT, padx=(0, 8))
+        self.reveal_button = ttk.Button(bottom, text="打开位置", command=self.reveal_location)
+        self.reveal_button.pack(side=tk.RIGHT, padx=(0, 8))
+        self.ai_button = ttk.Button(bottom, text="AI 诊断", command=self.run_ai_diagnosis)
+        self.ai_button.pack(side=tk.RIGHT, padx=(0, 8))
 
         statusbar = ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN, padding=(6, 2))
         statusbar.pack(fill=tk.X, side=tk.BOTTOM)
@@ -309,6 +379,7 @@ class ScaiGuiApp:
             return
         self.scan_root = resolved
         self.include_all = self.include_all_var.get()
+        save_last_root(resolved)
         self.rows = []
         self.refresh_tree()
         self.set_detail("")
@@ -359,6 +430,7 @@ class ScaiGuiApp:
         if analysis is None:
             self.status_var.set("扫描未完成")
             return
+        self.analysis = analysis
         self.rows = []
         for record in analysis.dirs:
             insight = scai.classify_path(record.path, record.size, "dir")
@@ -470,12 +542,129 @@ class ScaiGuiApp:
             )
 
     def set_detail(self, text: str) -> None:
-        self.detail.state(["normal"])
+        self.detail.config(state=tk.NORMAL)
         self.detail.delete("1.0", tk.END)
         self.detail.insert("1.0", text)
-        self.detail.state(["disabled"])
+        self.detail.config(state=tk.DISABLED)
 
     # ---------------------------------------------------------------- 选择与删除
+
+    def auto_check_by_target(self) -> None:
+        if not self.rows:
+            messagebox.showinfo("Scai", "请先完成一次扫描。")
+            return
+        try:
+            target = scai.parse_size(self.target_var.get().strip())
+        except ValueError as exc:
+            messagebox.showwarning("Scai", f"目标大小无效: {exc}\n示例: 20g、500m")
+            return
+        insights = [
+            scai.Insight(
+                path=row.path,
+                size=row.size,
+                kind="dir" if row.kind == "文件夹" else "file",
+                risk=row.risk,
+                category=row.category,
+                reason=row.reason,
+                action=row.action,
+            )
+            for row in self.rows
+        ]
+        selected, total = scai.select_plan_items(insights, target, root=self.scan_root)
+        selected_paths = {str(item.path) for item in selected}
+        for row in self.rows:
+            row.checked = str(row.path) in selected_paths and row.deletable
+        self.refresh_tree()
+        self.status_var.set(
+            f"已按目标 {scai.human_size(target)} 勾选 {len(selected)} 项, 共约 {scai.human_size(total)}; 请人工复核后再删除。"
+        )
+
+    def reveal_location(self) -> None:
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showinfo("Scai", "请先在列表中选择一个项目。")
+            return
+        row = self.row_at(selection[0])
+        if row is None:
+            return
+        if not row.path.exists():
+            messagebox.showinfo("Scai", f"路径已不存在:\n{row.path}")
+            return
+        try:
+            if IS_WINDOWS:
+                subprocess.run(["explorer", "/select,", str(row.path)], check=False)
+            elif IS_MACOS:
+                subprocess.run(["open", "-R", str(row.path)], check=False)
+            else:
+                subprocess.run(["xdg-open", str(row.path.parent)], check=False)
+        except OSError:
+            pass
+
+    # ---------------------------------------------------------------- AI 诊断
+
+    def run_ai_diagnosis(self) -> None:
+        if self.ai_thread is not None and self.ai_thread.is_alive():
+            return
+        if self.analysis is None:
+            messagebox.showinfo("Scai AI 诊断", "请先完成一次扫描, 再生成 AI 诊断。")
+            return
+        prompt = scai.build_ai_prompt(self.analysis)
+
+        def worker() -> None:
+            status, message = scai.invoke_codex_diagnosis(prompt, timeout=180)
+            self.events.put(("ai", (status, message)))
+
+        self.ai_button.state(["disabled"])
+        self.status_var.set("正在调用 Codex CLI 分析, 通常需要 1-3 分钟…")
+        self.ai_thread = threading.Thread(target=worker, daemon=True)
+        self.ai_thread.start()
+        self.root.after(200, self.poll_ai)
+
+    def poll_ai(self) -> None:
+        if self.ai_thread is not None and self.ai_thread.is_alive():
+            try:
+                self.root.after(200, self.poll_ai)
+            except tk.TclError:
+                pass
+            return
+        try:
+            kind, payload = self.events.get_nowait()
+        except queue.Empty:
+            self.ai_button.state(["!disabled"])
+            return
+        if kind != "ai":
+            self.ai_button.state(["!disabled"])
+            return
+        status, message = payload  # type: ignore[misc]
+        self.ai_button.state(["!disabled"])
+        if status == "ok":
+            self.status_var.set("AI 诊断完成。")
+            self.show_ai_window(message)
+        elif status == "missing":
+            self.status_var.set("未找到 codex CLI。")
+            messagebox.showinfo("Scai AI 诊断", "未找到 codex CLI。\n安装并登录 Codex 后重试, 或直接使用列表中的风险分类与建议。")
+        elif status == "timeout":
+            self.status_var.set("Codex AI 分析超时。")
+            messagebox.showwarning("Scai AI 诊断", "Codex AI 分析超时, 请稍后重试。")
+        else:
+            self.status_var.set("Codex AI 分析失败。")
+            messagebox.showwarning("Scai AI 诊断", "Codex AI 分析失败:\n" + (message or "未知错误"))
+
+    def show_ai_window(self, markdown_text: str) -> None:
+        window = tk.Toplevel(self.root)
+        window.title("Scai AI 诊断")
+        window.geometry("880x620")
+        window.transient(self.root)
+        text = tk.Text(window, wrap=tk.WORD, font=tkfont.nametofont("TkFixedFont"))
+        scrollbar = ttk.Scrollbar(window, orient=tk.VERTICAL, command=text.yview)
+        text.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        text.pack(fill=tk.BOTH, expand=True)
+        text.insert("1.0", render_markdown_plain(markdown_text))
+        text.config(state=tk.DISABLED)
+        ttk.Button(window, text="关闭", command=window.destroy).pack(pady=6)
+        window.bind("<Escape>", lambda _event: window.destroy())
+        window.grab_set()
 
     def checked_rows(self) -> list[GuiRow]:
         return [row for row in self.rows if row.checked and row.deletable]
@@ -567,9 +756,14 @@ class ScaiGuiApp:
         self.root.mainloop()
 
 
-def launch(root_path: Path, include_all: bool = False, limit: int = DEFAULT_GUI_LIMIT) -> int:
+def launch(
+    root_path: Path,
+    include_all: bool = False,
+    limit: int = DEFAULT_GUI_LIMIT,
+    auto_scan: bool = True,
+) -> int:
     try:
-        app = ScaiGuiApp(root_path=root_path, include_all=include_all, limit=limit)
+        app = ScaiGuiApp(root_path=root_path, include_all=include_all, limit=limit, auto_scan=auto_scan)
     except tk.TclError as exc:
         print(f"无法创建图形界面: {exc}", file=sys.stderr)
         return 2
@@ -579,14 +773,15 @@ def launch(root_path: Path, include_all: bool = False, limit: int = DEFAULT_GUI_
 
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
-    root_path = Path.cwd()
+    include_all = "--all" in args
     positional = [arg for arg in args if not arg.startswith("-")]
     if positional:
         candidate = Path(positional[0]).expanduser()
         if candidate.exists():
-            root_path = candidate.resolve()
-    include_all = "--all" in args
-    return launch(root_path=root_path, include_all=include_all)
+            return launch(root_path=candidate.resolve(), include_all=include_all, auto_scan=True)
+    # 无参数启动(双击 exe): 恢复上次扫描目录或用户主目录, 不自动扫描 exe 所在目录
+    last = load_last_root()
+    return launch(root_path=last or Path.home(), include_all=include_all, auto_scan=False)
 
 
 if __name__ == "__main__":

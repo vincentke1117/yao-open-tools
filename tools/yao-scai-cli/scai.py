@@ -1499,70 +1499,85 @@ def analysis_payload(analysis: SpaceAnalysis) -> dict[str, object]:
     }
 
 
-def run_ai(args: argparse.Namespace) -> int:
-    root = COMPUTER_SCAN_ROOT if args.computer else Path(args.root).expanduser().resolve()
-    analysis = run_with_progress(
-        f"Scai 正在扫描 {root}",
-        lambda: create_space_analysis(root=root, limit=args.limit, include_all=args.all, max_depth=1),
-    )
+def build_ai_prompt(analysis: SpaceAnalysis) -> str:
     payload = analysis_payload(analysis)
-
-    codex = shutil.which("codex")
-    if not codex:
-        print("未找到 codex CLI。先输出本地规则分析摘要:")
-        print()
-        return run_brief(args)
-
-    prompt = (
+    return (
         "你是 Scai 的磁盘空间顾问。只根据下面 JSON 扫描摘要分析，不读取文件内容，"
         "不要建议直接永久删除。请用中文输出：空间概览、主要占用、可安全关注、需要确认、不要碰、下一步建议。"
         "可以使用 Markdown 标题、加粗、列表和代码块，不要使用 Markdown 表格。\n\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)
     )
 
+
+def invoke_codex_diagnosis(prompt: str, timeout: int) -> tuple[str, str]:
+    """调用 codex exec 生成 AI 诊断，供 CLI 与 GUI 共用。
+
+    返回 (状态, 消息): 状态为 ok / missing(未安装 codex) / timeout / error。
+    ok 时消息为诊断正文；error 时消息为 stderr 说明，其余状态消息为空。
+    """
+    codex = shutil.which("codex")
+    if not codex:
+        return "missing", ""
     with tempfile.NamedTemporaryFile("r+", encoding="utf-8", delete=False) as output_file:
         output_path = output_file.name
-
     try:
-        completed = subprocess.run(
-            [
-                codex,
-                "exec",
-                "--skip-git-repo-check",
-                "--sandbox",
-                "read-only",
-                "--output-last-message",
-                output_path,
-                "-",
-            ],
-            input=prompt,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=args.timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        print("Codex AI 分析超时，下面是本地规则分析摘要。", file=sys.stderr)
-        print()
-        return run_brief(args)
-    else:
+        try:
+            completed = subprocess.run(
+                [
+                    codex,
+                    "exec",
+                    "--skip-git-repo-check",
+                    "--sandbox",
+                    "read-only",
+                    "--output-last-message",
+                    output_path,
+                    "-",
+                ],
+                input=prompt,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return "timeout", ""
         if completed.returncode != 0:
-            print("Codex AI 分析失败，下面是本地规则分析摘要。", file=sys.stderr)
-            if completed.stderr.strip():
-                print(completed.stderr.strip(), file=sys.stderr)
-            print()
-            return run_brief(args)
+            return "error", completed.stderr.strip()
         with open(output_path, encoding="utf-8") as handle:
             message = handle.read().strip()
         message = message or completed.stdout.strip() or "Codex 没有返回分析内容。"
-        print(render_markdown_for_terminal(message))
-        return 0
+        return "ok", message
     finally:
         try:
             os.unlink(output_path)
         except OSError:
             pass
+
+
+def run_ai(args: argparse.Namespace) -> int:
+    root = COMPUTER_SCAN_ROOT if args.computer else Path(args.root).expanduser().resolve()
+    analysis = run_with_progress(
+        f"Scai 正在扫描 {root}",
+        lambda: create_space_analysis(root=root, limit=args.limit, include_all=args.all, max_depth=1),
+    )
+    status, message = invoke_codex_diagnosis(build_ai_prompt(analysis), args.timeout)
+    if status == "ok":
+        print(render_markdown_for_terminal(message))
+        return 0
+    if status == "missing":
+        print("未找到 codex CLI。先输出本地规则分析摘要:")
+        print()
+        return run_brief(args)
+    if status == "timeout":
+        print("Codex AI 分析超时，下面是本地规则分析摘要。", file=sys.stderr)
+        print()
+        return run_brief(args)
+    print("Codex AI 分析失败，下面是本地规则分析摘要。", file=sys.stderr)
+    if message:
+        print(message, file=sys.stderr)
+    print()
+    return run_brief(args)
 
 
 @dataclass

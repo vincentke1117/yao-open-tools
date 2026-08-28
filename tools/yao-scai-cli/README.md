@@ -80,7 +80,7 @@ To package Scai into a single `scai.exe` that needs no Python on the target mach
 python .\build_exe.py
 ```
 
-The build script creates an isolated `.venv-build`, installs PyInstaller (plus `windows-curses`, so the TUI works out of the box) and produces two executables: `dist\scai.exe` (console CLI/TUI, about 12 MB) and `dist\scai-gui.exe` (windowed GUI, double-click to launch). Copy them anywhere on `PATH`, for example `%USERPROFILE%\bin`.
+The build script creates an isolated `.venv-build`, installs PyInstaller (plus `windows-curses`, so the TUI works out of the box) and produces two fully portable single-file executables: `dist\scai.exe` (console CLI/TUI, about 12 MB) and `dist\scai-gui.exe` (windowed GUI, about 12 MB, double-click to launch). No installation or Python is needed on the target machine — copy them to any folder (or a USB stick) and run. Optionally put them on `PATH`, e.g. `%USERPROFILE%\bin`.
 
 If the default PyPI is slow, point the build at a mirror:
 
@@ -204,6 +204,13 @@ scai gui ~/Downloads
 ```
 
 Workflow: pick a directory (or use 全盘扫描) → scan → browse results color-coded by risk (green = rebuildable caches, amber = needs confirmation, red = system-managed, locked) → check items → 删除所选. The selection summary shows the deduplicated total (parent folders absorb their checked children).
+
+Extra actions:
+
+- 按目标勾选: enter a target like `20g` or `500m` and auto-check a plan (safe items first, coarse folders filtered out) for human review before deletion.
+- AI 诊断: sends the JSON scan summary to the local Codex CLI (same read-only flow as `scai ai`) and shows the rendered report in a window.
+- 打开位置 / double-click a row: reveal the item in Explorer/Finder/file manager.
+- The GUI remembers the last scanned directory (`~/.scai/gui-state.json`). Double-clicking `scai-gui.exe` opens with that directory preloaded — it never scans the exe's own folder.
 
 Safety model:
 
