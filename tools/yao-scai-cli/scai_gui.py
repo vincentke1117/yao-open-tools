@@ -14,7 +14,6 @@ import ctypes
 import json
 import os
 import queue
-import re
 import subprocess
 import sys
 import threading
@@ -192,31 +191,6 @@ def save_last_root(root: Path) -> None:
         pass
 
 
-def render_markdown_plain(markdown: str) -> str:
-    # GUI 无 ANSI 环境, 复用 scai 的行内转换(styles=False)得到纯文本
-    rendered: list[str] = []
-    in_code_block = False
-    for raw_line in markdown.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
-        stripped = raw_line.strip()
-        if stripped.startswith(("```", "~~~")):
-            in_code_block = not in_code_block
-            rendered.append("")
-            continue
-        if in_code_block:
-            rendered.append(f"    {raw_line.rstrip()}")
-            continue
-        if not stripped:
-            if rendered and rendered[-1]:
-                rendered.append("")
-            continue
-        heading = re.match(r"^(#{1,6})\s+(.+)$", stripped)
-        if heading:
-            rendered.append(scai.render_inline_markdown(heading.group(2).strip(), False))
-            continue
-        rendered.append(scai.render_inline_markdown(raw_line.rstrip(), False))
-    return "\n".join(rendered).strip()
-
-
 # ---------------------------------------------------------------- GUI
 
 
@@ -253,7 +227,6 @@ class ScaiGuiApp:
         self.filter = "all"
         self.analysis = None
         self.scan_thread: threading.Thread | None = None
-        self.ai_thread: threading.Thread | None = None
         self.scan_started_at = 0.0
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
 
@@ -352,7 +325,7 @@ class ScaiGuiApp:
         self.delete_button.pack(side=tk.RIGHT, padx=(0, 8))
         self.reveal_button = ttk.Button(bottom, text="打开位置", command=self.reveal_location)
         self.reveal_button.pack(side=tk.RIGHT, padx=(0, 8))
-        self.ai_button = ttk.Button(bottom, text="AI 诊断", command=self.run_ai_diagnosis)
+        self.ai_button = ttk.Button(bottom, text="AI 提示词", command=self.show_ai_prompt)
         self.ai_button.pack(side=tk.RIGHT, padx=(0, 8))
 
         statusbar = ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN, padding=(6, 2))
@@ -600,69 +573,42 @@ class ScaiGuiApp:
         except OSError:
             pass
 
-    # ---------------------------------------------------------------- AI 诊断
+    # ---------------------------------------------------------------- AI 提示词
 
-    def run_ai_diagnosis(self) -> None:
-        if self.ai_thread is not None and self.ai_thread.is_alive():
-            return
+    def show_ai_prompt(self) -> None:
+        """生成包含扫描摘要的诊断提示词, 供用户复制给任意 AI; 本程序不调用任何 AI 服务。"""
         if self.analysis is None:
-            messagebox.showinfo("Scai AI 诊断", "请先完成一次扫描, 再生成 AI 诊断。")
+            messagebox.showinfo("Scai AI 提示词", "请先完成一次扫描, 再生成 AI 提示词。")
             return
         prompt = scai.build_ai_prompt(self.analysis)
-
-        def worker() -> None:
-            status, message = scai.invoke_codex_diagnosis(prompt, timeout=180)
-            self.events.put(("ai", (status, message)))
-
-        self.ai_button.state(["disabled"])
-        self.status_var.set("正在调用 Codex CLI 分析, 通常需要 1-3 分钟…")
-        self.ai_thread = threading.Thread(target=worker, daemon=True)
-        self.ai_thread.start()
-        self.root.after(200, self.poll_ai)
-
-    def poll_ai(self) -> None:
-        if self.ai_thread is not None and self.ai_thread.is_alive():
-            try:
-                self.root.after(200, self.poll_ai)
-            except tk.TclError:
-                pass
-            return
-        try:
-            kind, payload = self.events.get_nowait()
-        except queue.Empty:
-            self.ai_button.state(["!disabled"])
-            return
-        if kind != "ai":
-            self.ai_button.state(["!disabled"])
-            return
-        status, message = payload  # type: ignore[misc]
-        self.ai_button.state(["!disabled"])
-        if status == "ok":
-            self.status_var.set("AI 诊断完成。")
-            self.show_ai_window(message)
-        elif status == "missing":
-            self.status_var.set("未找到 codex CLI。")
-            messagebox.showinfo("Scai AI 诊断", "未找到 codex CLI。\n安装并登录 Codex 后重试, 或直接使用列表中的风险分类与建议。")
-        elif status == "timeout":
-            self.status_var.set("Codex AI 分析超时。")
-            messagebox.showwarning("Scai AI 诊断", "Codex AI 分析超时, 请稍后重试。")
-        else:
-            self.status_var.set("Codex AI 分析失败。")
-            messagebox.showwarning("Scai AI 诊断", "Codex AI 分析失败:\n" + (message or "未知错误"))
-
-    def show_ai_window(self, markdown_text: str) -> None:
         window = tk.Toplevel(self.root)
-        window.title("Scai AI 诊断")
+        window.title("Scai AI 诊断提示词")
         window.geometry("880x620")
         window.transient(self.root)
-        text = tk.Text(window, wrap=tk.WORD, font=tkfont.nametofont("TkFixedFont"))
-        scrollbar = ttk.Scrollbar(window, orient=tk.VERTICAL, command=text.yview)
+        intro = (
+            "以下提示词已包含本次扫描摘要(JSON)。点击「复制全部」后粘贴到任意 AI 对话"
+            "(ChatGPT / Claude / Gemini / Codex 等)即可获得磁盘清理诊断。Scai 不会调用任何 AI 服务。"
+        )
+        ttk.Label(window, text=intro, wraplength=840, padding=(8, 8, 8, 4)).pack(fill=tk.X)
+        frame = ttk.Frame(window)
+        frame.pack(fill=tk.BOTH, expand=True, padx=8)
+        text = tk.Text(frame, wrap=tk.WORD, font=tkfont.nametofont("TkFixedFont"))
+        scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=text.yview)
         text.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         text.pack(fill=tk.BOTH, expand=True)
-        text.insert("1.0", render_markdown_plain(markdown_text))
+        text.insert("1.0", prompt)
         text.config(state=tk.DISABLED)
-        ttk.Button(window, text="关闭", command=window.destroy).pack(pady=6)
+
+        def copy_prompt() -> None:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(prompt)
+            self.status_var.set("AI 提示词已复制到剪贴板, 可直接粘贴给任意 AI。")
+
+        buttons = ttk.Frame(window, padding=(0, 6))
+        buttons.pack()
+        ttk.Button(buttons, text="复制全部", command=copy_prompt).pack(side=tk.LEFT, padx=4)
+        ttk.Button(buttons, text="关闭", command=window.destroy).pack(side=tk.LEFT, padx=4)
         window.bind("<Escape>", lambda _event: window.destroy())
         window.grab_set()
 

@@ -208,7 +208,7 @@ Workflow: pick a directory (or use 全盘扫描) → scan → browse results col
 Extra actions:
 
 - 按目标勾选: enter a target like `20g` or `500m` and auto-check a plan (safe items first, coarse folders filtered out) for human review before deletion.
-- AI 诊断: sends the JSON scan summary to the local Codex CLI (same read-only flow as `scai ai`) and shows the rendered report in a window.
+- AI 提示词: generates a copyable diagnosis prompt containing the JSON scan summary — paste it into any AI chat (ChatGPT / Claude / Gemini / ...). The GUI never calls an AI service itself; the CLI `scai ai` still offers direct Codex diagnosis.
 - 打开位置 / double-click a row: reveal the item in Explorer/Finder/file manager.
 - The GUI remembers the last scanned directory (`~/.scai/gui-state.json`). Double-clicking `scai-gui.exe` opens with that directory preloaded — it never scans the exe's own folder.
 
@@ -218,6 +218,17 @@ Safety model:
 - `risky` items (system paths, `pagefile.sys`, ...) cannot be checked.
 - A confirmation dialog lists every target before anything happens.
 - Every action is appended to `~/.scai/cleanup-log.jsonl` (path, size, risk, result, error). Use 打开日志 to inspect it.
+
+## Agent Skill
+
+Ship Scai to agent environments as a skill plus portable binaries:
+
+```powershell
+python .\build_exe.py   # produces dist\scai.exe / dist\scai-gui.exe
+python .\build_zip.py   # produces dist\scai-skill.zip (~22 MB)
+```
+
+The zip contains `scai-skill/` with `SKILL.md` (teaches agents the scai workflow: scan → explain → plan → hand deletion to the user, never delete permanently), `INSTALL.md`, one-click installers (`install-skill.cmd` / `install-skill.sh`), and `bin/` holding both portable exes. The installer places the skill into `~/.agents/skills/scai/` and the exes onto `PATH`; SKILL.md source lives in `skill/` in this repo.
 
 ## Rule Analysis
 
