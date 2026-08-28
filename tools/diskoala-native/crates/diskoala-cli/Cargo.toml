@@ -1,0 +1,13 @@
+[package]
+name = "diskoala-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Diskoala CLI — 磁盘空间扫描与清理顾问（原生版）"
+
+[[bin]]
+name = "diskoala"
+path = "src/main.rs"
+
+[dependencies]
+diskoala-core = { path = "../diskoala-core" }

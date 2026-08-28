@@ -1,0 +1,10 @@
+[package]
+name = "diskoala-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Diskoala engine: scanning, risk classification, reclaim plans, recycle-bin cleanup"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

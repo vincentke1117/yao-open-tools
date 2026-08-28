@@ -1,0 +1,21 @@
+[package]
+name = "diskoala-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Diskoala GUI — Tauri 原生图形界面"
+default-run = "diskoala-gui"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+diskoala-core = { path = "../../../crates/diskoala-core" }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde.workspace = true
+serde_json.workspace = true
+
+[[bin]]
+name = "diskoala-gui"
+path = "src/main.rs"
