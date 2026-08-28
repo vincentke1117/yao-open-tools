@@ -144,6 +144,8 @@ COMMAND_ALIASES = {
     "more": "more",
     "m": "more",
     "ai": "ai",
+    "gui": "gui",
+    "g": "gui",
 }
 COMPUTER_ROOT_ALIASES = {
     "all",
@@ -2014,6 +2016,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  scai explain PATH    解释某个文件或目录\n"
             "  scai plan 20g        生成释放空间方案\n"
             "  scai ai              调用 Codex CLI 生成 AI 诊断\n"
+            "  scai gui             打开图形界面（扫描/建议/移到回收站）\n"
             + (
                 "\nWindows 示例:\n"
                 "  scai C:\\Users\\你的用户名\n"
@@ -2056,6 +2059,9 @@ def build_parser() -> argparse.ArgumentParser:
     ai_parser = subparsers.add_parser("ai", help="用 Codex CLI 对扫描摘要做 AI 诊断。")
     add_common_args(ai_parser, "扫描根目录，默认是当前目录。", default_limit=DEFAULT_BRIEF_LIMIT)
     ai_parser.add_argument("--timeout", type=int, default=180, help="Codex 分析超时时间，默认 180 秒。")
+
+    gui_parser = subparsers.add_parser("gui", help="打开图形界面：扫描、查看建议、勾选后移动到回收站。")
+    add_common_args(gui_parser, "启动时扫描的根目录，默认是当前目录。", default_limit=200)
 
     return parser
 
@@ -2218,6 +2224,20 @@ def run_tui(args: argparse.Namespace) -> int:
     return curses.wrapper(app.run)
 
 
+def run_gui(args: argparse.Namespace) -> int:
+    root = COMPUTER_SCAN_ROOT if args.computer else Path(args.root).expanduser().resolve()
+    try:
+        import scai_gui
+    except ImportError as exc:
+        print(
+            f"GUI 不可用：加载图形模块失败 ({exc})。\n"
+            "Linux 可尝试安装 python3-tk；或改用 CLI: scai / scai top / scai dirs / scai plan",
+            file=sys.stderr,
+        )
+        return 2
+    return scai_gui.launch(root_path=root, include_all=args.all, limit=args.limit)
+
+
 def should_use_tui(program_name: str, force_tui: bool, force_plain: bool) -> bool:
     if force_plain:
         return False
@@ -2259,6 +2279,8 @@ def main() -> int:
         return run_plan(args)
     if args.command == "ai":
         return run_ai(args)
+    if args.command == "gui":
+        return run_gui(args)
 
     parser.error(f"未知命令: {args.command}")
     return 2

@@ -14,6 +14,7 @@ Scai is not meant to be only another `du` wrapper. The goal is to scan disk usag
 - Dynamic scan progress in interactive terminals.
 - Top 50 file details in the default brief, with `scai more` for longer lists.
 - TUI browser for interactive exploration.
+- GUI companion (`scai gui` / `scai-gui.exe`): scan, risk-colored suggestions, checkbox selection, and one-click cleanup that moves items to the Recycle Bin with a full audit log.
 - Rule analysis engine for caches, build artifacts, archives, media, backups, data files, and risky system paths.
 - Cleanup plan generation with no deletion side effects.
 - Optional AI diagnosis through the official `codex exec` CLI when available.
@@ -79,7 +80,7 @@ To package Scai into a single `scai.exe` that needs no Python on the target mach
 python .\build_exe.py
 ```
 
-The build script creates an isolated `.venv-build`, installs PyInstaller (plus `windows-curses`, so the TUI works out of the box) and produces `dist\scai.exe` (about 8 MB). Copy it anywhere on `PATH`, for example `%USERPROFILE%\bin`.
+The build script creates an isolated `.venv-build`, installs PyInstaller (plus `windows-curses`, so the TUI works out of the box) and produces two executables: `dist\scai.exe` (console CLI/TUI, about 12 MB) and `dist\scai-gui.exe` (windowed GUI, double-click to launch). Copy them anywhere on `PATH`, for example `%USERPROFILE%\bin`.
 
 If the default PyPI is slow, point the build at a mirror:
 
@@ -102,6 +103,7 @@ scai tui          # open TUI browser
 scai explain PATH # explain one file or folder
 scai plan 20g     # generate a reclaim plan
 scai ai           # ask Codex CLI to analyze the scan summary
+scai gui          # open the GUI (scan, advice, safe cleanup)
 ```
 
 ### Windows cleanup examples
@@ -191,6 +193,24 @@ TUI keys:
 - `?`: show or hide help.
 
 The bottom panel follows the current selection and shows available metadata such as name, type, size, extension, modified/access/created times, permissions, owner/group, inode, relative path, absolute path, parent folder, risk category, and the safer next action.
+
+## GUI
+
+`scai gui` (or double-click `scai-gui.exe`) opens a windowed interface for human-driven cleanup:
+
+```bash
+scai gui
+scai gui ~/Downloads
+```
+
+Workflow: pick a directory (or use 全盘扫描) → scan → browse results color-coded by risk (green = rebuildable caches, amber = needs confirmation, red = system-managed, locked) → check items → 删除所选. The selection summary shows the deduplicated total (parent folders absorb their checked children).
+
+Safety model:
+
+- Deletion always moves items to the Recycle Bin / Trash (never permanent). Restoring is possible from the Recycle Bin.
+- `risky` items (system paths, `pagefile.sys`, ...) cannot be checked.
+- A confirmation dialog lists every target before anything happens.
+- Every action is appended to `~/.scai/cleanup-log.jsonl` (path, size, risk, result, error). Use 打开日志 to inspect it.
 
 ## Rule Analysis
 

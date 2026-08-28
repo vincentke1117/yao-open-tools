@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""把 scai.py 打包成独立可执行文件（Windows 下为 dist/scai.exe）。
+"""把 Scai 打包成独立可执行文件（Windows 下为 dist/scai.exe 与 dist/scai-gui.exe）。
 
 用法:
     python build_exe.py
@@ -11,7 +11,7 @@
 流程:
     1. 在 .venv-build 中准备独立构建环境（不污染用户 Python）。
     2. 安装 PyInstaller；Windows 上额外安装 windows-curses，让 exe 的 TUI 开箱即用。
-    3. 以单文件模式打包，产物在 dist/scai(.exe)。
+    3. 单文件模式打包 scai（控制台 CLI/TUI）与 scai-gui（无控制台图形界面）。
 
 构建产物 build/、dist/、*.spec、.venv-build/ 均不进入版本库。
 """
@@ -67,25 +67,32 @@ def main() -> int:
         note("安装 windows-curses（打包进 exe，保证 TUI 可用）")
         pip_install(venv_python, "windows-curses")
 
-    note("开始打包 scai")
-    run(
-        [
-            str(venv_python),
-            "-m",
-            "PyInstaller",
-            "--noconfirm",
-            "--clean",
-            "--onefile",
-            "--name",
-            "scai",
-            str(SCRIPT_DIR / "scai.py"),
-        ]
-    )
+    targets = [
+        ("scai", SCRIPT_DIR / "scai.py", []),
+        # scai-gui 双击直接进图形界面，不附带控制台窗口
+        ("scai-gui", SCRIPT_DIR / "scai_gui_main.py", ["--noconsole"]),
+    ]
+    for name, entry, extra_flags in targets:
+        note(f"开始打包 {name}")
+        run(
+            [
+                str(venv_python),
+                "-m",
+                "PyInstaller",
+                "--noconfirm",
+                "--clean",
+                "--onefile",
+                "--name",
+                name,
+                *extra_flags,
+                str(entry),
+            ]
+        )
 
-    output = SCRIPT_DIR / "dist" / ("scai.exe" if IS_WINDOWS else "scai")
-    note(f"完成: {output}")
-    if IS_WINDOWS:
-        note("使用: 把 dist/scai.exe 复制到 PATH 中的目录（例如 %USERPROFILE%\\bin），或直接双击所在目录运行")
+    note("完成:")
+    for name, _, _ in targets:
+        output = SCRIPT_DIR / "dist" / (f"{name}.exe" if IS_WINDOWS else name)
+        note(f"  {output}")
     return 0
 
 
