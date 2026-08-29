@@ -715,6 +715,8 @@
         setFooter();
       }
     } catch (e) { /* 初始化失败不阻塞界面 */ }
+    show("empty");
+    S.statusReady = true;
 
     const params = new URLSearchParams(location.search);
     if (params.get("smoke") === "1") {
@@ -735,6 +737,7 @@
       // 等 init 完成
       for (let i = 0; i < 50 && !window.__scaiComputerRoot; i++) await sleep(100);
       step("init-state", !!window.__scaiComputerRoot);
+      step("initial-empty-view", !$("view-empty").classList.contains("hidden") && $("view-scanning").classList.contains("hidden"));
 
       await startScan(dir, false);
       for (let i = 0; i < 120 && S.view !== "results"; i++) await sleep(250);
