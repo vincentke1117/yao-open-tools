@@ -342,6 +342,9 @@ b { font-weight: 600; }
 .toast.error { border-left-color: var(--risky); }
 @keyframes toast-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 
+.scanbar.is-disabled { opacity: 0.55; pointer-events: none; }
+.scanbar.is-disabled .input, .scanbar.is-disabled .btn { cursor: not-allowed; }
+
 /* 滚动条 */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }

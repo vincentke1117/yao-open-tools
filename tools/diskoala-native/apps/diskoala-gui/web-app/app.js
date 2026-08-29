@@ -59,6 +59,10 @@
     $("view-scanning").classList.toggle("hidden", view !== "scanning");
     $("view-results").classList.toggle("hidden", view !== "results");
     $("scanbar").classList.toggle("hidden", view === "empty");
+    // 规格要求：扫描进行中，顶部扫描区折叠/置灰不可操作
+    const scanning = view === "scanning";
+    $("scanbar").classList.toggle("is-disabled", scanning);
+    ["scan-path", "btn-browse", "btn-scan-all", "btn-scan"].forEach((id) => { $(id).disabled = scanning; });
   }
 
   function toast(text, kind) {
@@ -455,12 +459,35 @@
     for (const k of removed) S.checked.delete(k);
     S.totalBytes = Math.max(0, (S.totalBytes || 0) - (res.freed || 0));
     renderAll();
-    const actionText = permanent ? "已永久删除 " : "已移到回收站 ";
-    if (res.failures && res.failures.length) {
-      toast(actionText + res.moved.length + " 项（" + res.freed_human + "），" + res.failures.length + " 项失败，详见日志", "warning");
-    } else {
-      toast(actionText + res.moved.length + " 项，释放约 " + res.freed_human + "。" + (permanent ? "" : "可从回收站恢复。") + "建议重新扫描查看最新空间分布。", permanent ? "warning" : "success");
+    openResult(res, permanent);
+  }
+
+  function openResult(res, permanent) {
+    const failures = res.failures || [];
+    $("result-title").textContent = failures.length ? "清理完成（部分失败）" : "清理完成";
+    const actionText = permanent ? "已永久删除" : "已移到回收站";
+    $("result-desc").textContent =
+      actionText + " " + (res.moved ? res.moved.length : 0) + " 项，释放约 " + res.freed_human + "。" +
+      (permanent ? "" : "可从回收站恢复。") + " 建议重新扫描查看最新空间分布。";
+    const list = $("result-fail-list");
+    list.innerHTML = "";
+    $("result-fail-wrap").classList.toggle("hidden", failures.length === 0);
+    for (const failure of failures) {
+      const tr = document.createElement("tr");
+      const tdPath = document.createElement("td");
+      tdPath.textContent = failure.key || "";
+      tdPath.title = failure.key || "";
+      const tdErr = document.createElement("td");
+      tdErr.className = "log-result-fail";
+      tdErr.textContent = failure.error || "未知原因";
+      tr.append(tdPath, tdErr);
+      list.appendChild(tr);
     }
+    $("result-overlay").classList.remove("hidden");
+  }
+
+  function closeResult() {
+    $("result-overlay").classList.add("hidden");
   }
 
   // ---------------- AI 提示词 ----------------
@@ -643,6 +670,7 @@
       else if (!$("prompt-overlay").classList.contains("hidden")) $("prompt-overlay").classList.add("hidden");
       else if (!$("log-overlay").classList.contains("hidden")) $("log-overlay").classList.add("hidden");
       else if (!$("about-overlay").classList.contains("hidden")) $("about-overlay").classList.add("hidden");
+      else if (!$("result-overlay").classList.contains("hidden")) closeResult();
     });
 
     document.querySelectorAll(".tab").forEach((t) =>
@@ -679,6 +707,9 @@
     $("log-cancel").addEventListener("click", () => $("log-overlay").classList.add("hidden"));
     $("log-refresh").addEventListener("click", refreshLogViewer);
     $("log-open-file").addEventListener("click", async () => { const a = api(); if (a) await a.open_log(); });
+    $("result-close").addEventListener("click", closeResult);
+    $("result-cancel").addEventListener("click", closeResult);
+    $("result-rescan").addEventListener("click", () => { closeResult(); startScan(S.root || $("scan-path").value, $("include-all").checked); });
     $("btn-about").addEventListener("click", openAbout);
     $("brand-about").addEventListener("click", openAbout);
     $("about-close").addEventListener("click", () => $("about-overlay").classList.add("hidden"));
@@ -738,8 +769,9 @@
       for (let i = 0; i < 50 && !window.__scaiComputerRoot; i++) await sleep(100);
       step("init-state", !!window.__scaiComputerRoot);
       step("initial-empty-view", !$("view-empty").classList.contains("hidden") && $("view-scanning").classList.contains("hidden"));
-
       await startScan(dir, false);
+      step("scanbar-disabled-while-scanning", $("btn-scan").disabled === true && $("scanbar").classList.contains("is-disabled"));
+
       for (let i = 0; i < 120 && S.view !== "results"; i++) await sleep(250);
       step("scan-results", S.view === "results");
       step("rows-nonempty", S.rows.length > 0, "rows=" + S.rows.length);
@@ -794,6 +826,12 @@
       await openPrompt();
       step("ai-prompt", !$("prompt-overlay").classList.contains("hidden") && $("prompt-text").value.length > 100);
       $("prompt-overlay").classList.add("hidden");
+
+      // 结果反馈弹窗（模拟数据）
+      openResult({ ok: true, mode: "recycle", moved: ["a.bin"], freed: 1024, freed_human: "1.0 KB", failures: [{ key: "C:\locked.dat", error: "文件被占用" }] }, false);
+      step("result-modal", !$("result-overlay").classList.contains("hidden") && $("result-fail-list").querySelectorAll("tr").length === 1);
+      closeResult();
+      step("result-modal-close", $("result-overlay").classList.contains("hidden"));
 
       // 关于弹窗
       openAbout();
