@@ -1,0 +1,74 @@
+# tokpoll — Nginx 站点配置示例
+#
+# 宝塔用法：
+#   1. 新建站点，PHP 版本选 8.0 及以上
+#   2. 网站设置 → 网站目录 → 运行目录 选择 /public
+#   3. 网站设置 → 伪静态 → 粘贴下面【伪静态部分】的内容（只有在 config.php 里
+#      把 pretty_url 设为 true 时才需要；保持 false 的话这一步可以跳过）
+#
+# ---------------------------------------------------------------- 伪静态部分
+# location / {
+#     try_files $uri $uri/ @rewrite;
+# }
+# location @rewrite {
+#     rewrite ^/history/?$        /index.php?p=history        last;
+#     rewrite ^/s/([0-9]+)/?$     /index.php?p=survey&id=$1   last;
+#     rewrite ^/(.*)$             /index.php                  last;
+# }
+#
+# ------------------------------------------------------- 安全部分（务必保留）
+# location ~* /(app|data|tools)/ {
+#     deny all;
+#     return 403;
+# }
+# location ~* \.(sqlite|sqlite3|db|log)$ {
+#     deny all;
+#     return 403;
+# }
+# location = /config.php {
+#     deny all;
+#     return 403;
+# }
+#
+# ================================================================ 完整示例
+server {
+    listen       80;
+    server_name  poll.example.com;
+
+    root  /www/wwwroot/tokpoll/public;
+    index index.php;
+
+    charset utf-8;
+    client_max_body_size 4m;
+
+    add_header X-Content-Type-Options  "nosniff"    always;
+    add_header X-Frame-Options         "SAMEORIGIN" always;
+    add_header Referrer-Policy         "same-origin" always;
+
+    # 源码与数据目录一律拒绝
+    location ~* ^/(app|data|tools)/ { deny all; return 403; }
+    location ~* \.(sqlite|sqlite3|db|log)$ { deny all; return 403; }
+    location = /config.php { deny all; return 403; }
+
+    location / {
+        try_files $uri $uri/ @rewrite;
+    }
+
+    location @rewrite {
+        rewrite ^/history/?$      /index.php?p=history      last;
+        rewrite ^/s/([0-9]+)/?$   /index.php?p=survey&id=$1 last;
+        rewrite ^/(.*)$           /index.php                last;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass   unix:/tmp/php-cgi-84.sock;   # 按实际 PHP 版本调整
+        fastcgi_index  index.php;
+        fastcgi_param  SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include        fastcgi_params;
+    }
+
+    location ~* \.(css|js|svg|png|jpg|ico|woff2)$ {
+        expires 7d;
+        access_log off;
+    }
+}

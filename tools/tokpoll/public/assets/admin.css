@@ -1,0 +1,122 @@
+/* Tokpoll — 管理后台样式（复用 app.css 的设计变量） */
+
+body.admin { background: var(--bg-sunken); }
+
+.abar {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: 18px;
+  height: 54px; padding: 0 22px;
+  background: color-mix(in srgb, var(--bg) 76%, transparent);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--hairline-soft);
+}
+.abar__brand { font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.abar__brand:hover { text-decoration: none; opacity: .7; }
+.abar__nav { display: flex; gap: 2px; overflow-x: auto; flex: 1 1 auto; scrollbar-width: none; }
+.abar__nav::-webkit-scrollbar { display: none; }
+.abar__nav a {
+  font-size: 14px; color: var(--text-2); padding: 6px 12px; border-radius: 980px; white-space: nowrap;
+  transition: background .2s var(--ease), color .2s var(--ease);
+}
+.abar__nav a:hover { background: var(--hairline-soft); color: var(--text); text-decoration: none; }
+.abar__nav a.on { background: var(--accent-soft); color: var(--accent); }
+.abar__right { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+
+.awrap { max-width: 1040px; margin: 0 auto; padding: 26px 22px 80px; }
+
+.ahead { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+.ahead h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.018em; }
+.ahead p { margin: 4px 0 0; font-size: 14px; color: var(--text-2); }
+
+.panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  padding: 20px 22px;
+  margin-bottom: 16px;
+}
+.panel > h2 { margin: 0 0 14px; font-size: 17px; font-weight: 600; letter-spacing: -.008em; }
+.panel--flat { box-shadow: none; }
+
+.flash {
+  margin-bottom: 16px; padding: 12px 16px; border-radius: var(--r-md);
+  background: var(--accent-soft); color: var(--accent); font-size: 14px;
+}
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th {
+  text-align: left; font-weight: 500; font-size: 12px; color: var(--text-3);
+  padding: 0 10px 10px; border-bottom: 1px solid var(--hairline-soft); white-space: nowrap;
+}
+.table td { padding: 12px 10px; border-bottom: 1px solid var(--hairline-soft); vertical-align: top; }
+.table tr:last-child td { border-bottom: 0; }
+.table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.table .actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+.pill {
+  display: inline-flex; align-items: center; height: 21px; padding: 0 9px;
+  border-radius: 980px; font-size: 11.5px; font-weight: 500; white-space: nowrap;
+}
+.pill--active { background: var(--accent-soft); color: var(--accent); }
+.pill--draft  { background: var(--track); color: var(--text-2); }
+.pill--closed { background: color-mix(in srgb, var(--text-3) 18%, transparent); color: var(--text-2); }
+.pill--hidden { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+.pill--pending{ background: rgba(245,158,11,.18); color: #b45309; }
+.pill--user   { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+@media (prefers-color-scheme: dark) { .pill--pending { color: #fbbf24; } }
+
+.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+.field__label small { color: var(--text-3); font-weight: 400; }
+.select {
+  width: 100%; padding: 11px 13px; border-radius: var(--r-md);
+  background: var(--bg-sunken); border: 1px solid transparent; font-size: 15px; outline: none;
+}
+.select:focus { border-color: var(--accent); background: var(--bg); }
+
+.check { display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px;
+         background: var(--bg-sunken); border-radius: var(--r-md); cursor: pointer; }
+.check input { margin-top: 3px; accent-color: var(--accent); width: 16px; height: 16px; }
+.check span { font-size: 14px; }
+.check small { display: block; color: var(--text-3); font-size: 12.5px; margin-top: 2px; }
+
+.tagpick { display: flex; flex-wrap: wrap; gap: 8px; }
+.tagpick label { cursor: pointer; }
+.tagpick input { position: absolute; opacity: 0; pointer-events: none; }
+.tagpick .tag { opacity: .42; transition: opacity .18s var(--ease), transform .18s var(--spring); }
+.tagpick input:checked + .tag { opacity: 1; transform: scale(1.04); }
+
+.mini-bar { height: 7px; border-radius: 4px; background: var(--track); overflow: hidden; min-width: 60px; }
+.mini-bar > i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+
+.inline-form { display: inline; }
+
+.login-wrap {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.login-card {
+  width: min(400px, 100%); background: var(--bg-elevated);
+  border: 1px solid var(--hairline-soft); border-radius: var(--r-xl);
+  box-shadow: var(--shadow-2); padding: 34px 30px;
+}
+.login-card h1 { margin: 0 0 6px; font-size: 23px; font-weight: 600; letter-spacing: -.015em; text-align: center; }
+.login-card p.sub { margin: 0 0 24px; font-size: 14px; color: var(--text-2); text-align: center; }
+.login-err { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger);
+             padding: 10px 14px; border-radius: var(--r-md); font-size: 13.5px; margin-bottom: 16px; }
+
+.muted-note { font-size: 13px; color: var(--text-3); line-height: 1.7; }
+.kv { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0;
+      border-bottom: 1px solid var(--hairline-soft); font-size: 14px; }
+.kv:last-child { border-bottom: 0; }
+.kv span:last-child { color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 640px) {
+  .awrap { padding: 18px 14px 70px; }
+  .abar { padding: 0 14px; gap: 12px; }
+  .abar__brand { display: none; }
+  .table th:nth-child(n+4), .table td:nth-child(n+4) { display: none; }
+  .panel { padding: 16px; }
+}

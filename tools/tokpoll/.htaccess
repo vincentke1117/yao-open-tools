@@ -1,0 +1,13 @@
+# 兜底保护：万一网站根目录被指到了项目根（而不是 public/），
+# 这里挡住源码、配置和数据库文件。正确做法仍然是把根目录指向 public/。
+
+<FilesMatch "\.(sqlite|sqlite3|db|log|md|example)$">
+    Require all denied
+</FilesMatch>
+
+<Files "config.php">
+    Require all denied
+</Files>
+
+RedirectMatch 403 ^/(app|data|tools)/
+Options -Indexes

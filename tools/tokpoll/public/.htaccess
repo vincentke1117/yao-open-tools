@@ -1,0 +1,32 @@
+# tokpoll — Apache 配置（网站根目录指向 public/ 时生效）
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "same-origin"
+</IfModule>
+
+# 静态资源缓存
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css              "access plus 7 days"
+    ExpiresByType application/javascript "access plus 7 days"
+    ExpiresByType image/svg+xml         "access plus 30 days"
+</IfModule>
+
+# 伪静态：/history → index.php?p=history，/s/12 → index.php?p=survey&id=12
+# 仅在 config.php 里把 pretty_url 设为 true 时才需要
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    RewriteRule ^history/?$            index.php?p=history            [L,QSA]
+    RewriteRule ^s/([0-9]+)/?$         index.php?p=survey&id=$1       [L,QSA]
+
+    # 其余不存在的路径交给 index.php
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$                 index.php                      [L,QSA]
+</IfModule>
+
+# 不允许列目录
+Options -Indexes

@@ -1,0 +1,57 @@
+<?php
+/**
+ * tokpoll 配置文件
+ *
+ * 用法：复制本文件为 config.php，按需修改。
+ *   cp config.php.example config.php
+ *
+ * 生成管理密码哈希：
+ *   php -r 'echo password_hash("你的新密码", PASSWORD_DEFAULT), PHP_EOL;'
+ */
+
+return [
+    // 站点名称，显示在页面左上角
+    'site_name' => 'Tokpoll · 问题征集与投票',
+
+    // 时区，决定「每天一票」以哪个时区的零点划分
+    'timezone' => 'Asia/Shanghai',
+
+    // 后台管理密码的哈希值。首次部署前必须填入你自己的哈希值。
+    // 生成方式：php -r 'echo password_hash("你的新密码", PASSWORD_DEFAULT), PHP_EOL;'
+    'admin_password_hash' => '',
+
+    // 后台入口口令（选填）。留空则 /admin.php 直接可访问登录页；
+    // 若填 'x7k2'，则后台地址变成 /admin.php?k=x7k2，降低被扫描到的概率。
+    'admin_path_token' => '',
+
+    // SQLite 数据库文件位置（该目录必须可写，且不能被 Web 直接访问）
+    'db_path' => __DIR__ . '/data/tokpoll.sqlite',
+
+    // 伪静态开关
+    //   false → 链接形如 /index.php?p=history（任何环境都能跑，默认）
+    //   true  → 链接形如 /history、/s/3（需按 README 配置 Nginx / Apache 规则）
+    'pretty_url' => false,
+
+    // IP 限制的严格程度
+    //   false（默认）→ 同 IP 不同设备可以各投各的。推荐：同一场地的人常连同一个 WiFi。
+    //   true         → 同 IP 每天也只能投一票。适合线上分散场景，防刷更强。
+    'strict_ip' => false,
+
+    // 是否信任反向代理传来的真实 IP。直连部署保持 false；
+    // 只有确认请求一定经过可信代理时才设为 true。
+    'trust_proxy' => false,
+
+    // 提问内容长度限制（按字符数，中文按 1 个算）
+    'question_min_len' => 4,
+    'question_max_len' => 80,
+    'detail_max_len'   => 200,
+
+    // 同一 IP 每分钟最多提交多少次写操作（投票 / 提问），防脚本刷
+    'rate_limit_per_min' => 30,
+
+    // 前台列表自动刷新间隔（毫秒）。设为 0 关闭自动刷新。
+    'poll_interval_ms' => 8000,
+
+    // 调试模式：true 时页面直接显示 PHP 错误。线上请保持 false。
+    'debug' => false,
+];

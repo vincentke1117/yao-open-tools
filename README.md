@@ -32,6 +32,7 @@ Yao 的开源小工具集合，面向本地优先的 AI 编码、开发者效率
 | [TokURL](tools/tokurl/README.md) | Node.js / Docker 自托管 Web App | Docker Compose | 短链接系统，支持极短 slug、二维码、访问统计、用户管理、站点设置和本地多容器部署。 |
 | [TokChat](tools/tokchat/README.md) | PHP / Docker AI Web App | Docker Compose | 自托管 AI 对话与知识库助手，支持后台用户管理、Prompt 场景、API 轮换、知识库切片、分享页和统计面板。 |
 | [live-quiz-interaction](tools/live-quiz-interaction/README.md) | React Static Web App | `npm run dev` / 静态部署 | 直播课堂填空答题互动页，内置有理数 100 题、积分、弹窗反馈、提示和解析。 |
+| [Tokpoll](tools/tokpoll/README.md) | PHP / SQLite Web App | PHP 内置服务器 / Nginx | 轻量问题征集与投票工具，适合公开课、团队议题和活动 Q&A，支持匿名投票、提问、审核、标签、历史结果和 CSV 导出。 |
 | [vidbrief](tools/vidbrief/README.md) | Python CLI/TUI | `vb` | 视频下载、字幕或音频转写、Transcript 整理和 AI 报告生成。 |
 | [mem](tools/mem/README.md) | Python CLI/TUI | `mem` | 本机内存、GPU、软件活跃度和进程明细诊断。 |
 | [Scai](tools/yao-scai-cli/README.md) | Python CLI/TUI | `scai` | AI-native 磁盘空间扫描与清理建议工具，用于找大文件、分析风险和生成释放空间方案。 |
@@ -146,6 +147,25 @@ docker compose up --build
 http://127.0.0.1:8080/admin      # Node 本机运行
 http://127.0.0.1:18082/admin     # Docker 运行
 ```
+
+### Tokpoll
+
+Tokpoll 是一个面向现场互动的轻量问题征集与投票工具。打开链接即可投票，也可以补充问题；管理员可以维护期次、候选问题、标签、审核状态和历史结果。
+
+它适合公开课、团队讨论、活动 Q&A 和小型调研。项目使用 PHP 8、SQLite 和原生前端，无需 Node.js、数据库服务或构建流程。
+
+快速开始：
+
+```bash
+cd tools/tokpoll
+cp config.php.example config.php
+php -r 'echo password_hash("你的新密码", PASSWORD_DEFAULT), PHP_EOL;'
+# 将输出填入 config.php 的 admin_password_hash
+php tools/seed.php
+bash tools/serve.sh
+```
+
+启动脚本会选择可用端口并打印前台、后台地址。部署到服务器时，请将网站根目录指向 `public/`，并确保 `data/` 可写。配置文件和 SQLite 数据库默认被 Git 忽略，公开部署前请替换管理密码哈希。
 
 ### TokURL
 

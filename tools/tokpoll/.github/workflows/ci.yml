@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install a test configuration
+        run: |
+          cp config.php.example config.php
+          hash="$(php -r 'echo password_hash("admin888", PASSWORD_DEFAULT);')"
+          sed -i "s#'admin_password_hash' => '',#'admin_password_hash' => '$hash',#" config.php
+
+      - name: Syntax checks
+        run: |
+          find app public tools -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+          node --check public/assets/app.js
+          node tools/state-refresh-test.js
+          bash -n tools/serve.sh
+          bash -n tools/selftest.sh
+
+      - name: Functional self-test
+        run: |
+          php tools/seed.php --reset
+          php -S 127.0.0.1:7317 -t public >/tmp/tokpoll-php.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 10); do
+            curl -fsS -o /dev/null http://127.0.0.1:7317/ && break
+            sleep 1
+          done
+          bash tools/selftest.sh http://127.0.0.1:7317

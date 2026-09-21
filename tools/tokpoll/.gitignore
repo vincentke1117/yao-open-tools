@@ -1,0 +1,15 @@
+# Local configuration and runtime data
+/config.php
+/data/*.sqlite*
+/data/*.db
+/data/*.log
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Local test output
+*.log
+tmp/
+test-results/
